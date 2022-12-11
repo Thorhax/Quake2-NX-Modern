@@ -37,7 +37,14 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 
-#ifdef __SWITCH__
+#if defined(__sun)
+#include <sys/filio.h>
+#if !defined(MAX)
+#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#endif
+#endif
+
+#if defined(__SWITCH__)
 // don't know why we don't have this defined
 struct ipv6_mreq
 {

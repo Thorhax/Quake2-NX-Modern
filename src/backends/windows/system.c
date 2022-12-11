@@ -69,6 +69,7 @@ Sys_Error(char *error, ...)
 	vsnprintf(text, sizeof(text), error, argptr);
 	va_end(argptr);
 	fprintf(stderr, "Error: %s\n", text);
+	fprintf(stdout, "Error: %s\n", text);
 
 	MessageBox(NULL, text, "Error", 0 /* MB_OK */);
 
@@ -97,13 +98,13 @@ Sys_Quit(void)
 		FreeConsole();
 	}
 
+	printf( "------------------------------------\n" );
+
 	/* Close stdout and stderr */
 #ifndef DEDICATED_ONLY
 	fclose(stdout);
 	fclose(stderr);
 #endif
-
-	printf("------------------------------------\n");
 
 	exit(0);
 }
@@ -234,6 +235,12 @@ Sys_ConsoleOutput(char *string)
 {
 	char text[256];
 	DWORD dummy;
+
+	if ((string[0] == 0x01) || (string[0] == 0x02))
+	{
+		// remove color marker
+		string[0] = ' ';
+	}
 
 	if (!dedicated || !dedicated->value)
 	{
@@ -593,21 +600,22 @@ Sys_RemoveDir(const char *path)
 	RemoveDirectoryW(wpath);
 }
 
-void
+qboolean
 Sys_Realpath(const char *in, char *out, size_t size)
 {
 	WCHAR win[MAX_OSPATH] = {0};
 	WCHAR wconverted[MAX_OSPATH] = {0};
 
-	MultiByteToWideChar(CP_UTF8, 0, in, -1, win, sizeof(win));
-	_wfullpath(wconverted, win, size);
+	MultiByteToWideChar(CP_UTF8, 0, in, -1, win, sizeof(win)/sizeof(win[0]));
 
-	if (wconverted == NULL)
+	if (_wfullpath(wconverted, win, size) == NULL)
 	{
-		Com_Error(ERR_FATAL, "Couldn't get realpath for %s\n", in);
+		Com_Printf("Couldn't get realpath for %s\n", in);
+		return false;
 	}
 
 	WideCharToMultiByte(CP_UTF8, 0, wconverted, -1, out, size, NULL, NULL);
+	return true;
 }
 
 /* ======================================================================= */
@@ -682,7 +690,7 @@ Sys_GetWorkDir(char *buffer, size_t len)
 {
 	WCHAR wbuffer[MAX_OSPATH];
 
-	if (GetCurrentDirectoryW(sizeof(wbuffer), wbuffer) != 0)
+	if (GetCurrentDirectoryW(sizeof(wbuffer)/sizeof(wbuffer[0]), wbuffer) != 0)
 	{
 		WideCharToMultiByte(CP_UTF8, 0, wbuffer, -1, buffer, len, NULL, NULL);
 		return;
@@ -696,7 +704,7 @@ Sys_SetWorkDir(char *path)
 {
 	WCHAR wpath[MAX_OSPATH];
 
-	MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, sizeof(wpath));
+	MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, sizeof(wpath)/sizeof(wpath[0]));
 
 	if (SetCurrentDirectoryW(wpath) != 0)
 	{
@@ -728,7 +736,7 @@ Sys_RedirectStdout(void)
 		Q_strlcpy(dir, tmp, sizeof(dir));
 	}
 
-	if (dir == NULL)
+	if (dir[0] == '\0')
 	{
 		return;
 	}
@@ -736,8 +744,8 @@ Sys_RedirectStdout(void)
 	snprintf(path_stdout, sizeof(path_stdout), "%s/%s", dir, "stdout.txt");
 	snprintf(path_stderr, sizeof(path_stderr), "%s/%s", dir, "stderr.txt");
 
-	MultiByteToWideChar(CP_UTF8, 0, path_stdout, -1, wpath_stdout, sizeof(wpath_stdout));
-	MultiByteToWideChar(CP_UTF8, 0, path_stderr, -1, wpath_stderr, sizeof(wpath_stderr));
+	MultiByteToWideChar(CP_UTF8, 0, path_stdout, -1, wpath_stdout, sizeof(wpath_stdout)/sizeof(wpath_stdout[0]));
+	MultiByteToWideChar(CP_UTF8, 0, path_stderr, -1, wpath_stderr, sizeof(wpath_stderr)/sizeof( wpath_stderr[0] ) );
 
 	_wfreopen(wpath_stdout, L"w", stdout);
 	_wfreopen(wpath_stderr, L"w", stderr);

@@ -95,7 +95,7 @@ typedef struct msurface_s
 
 	// lighting info
 	byte		styles[MAXLIGHTMAPS];
-	byte		*samples;	// [numstyles*surfsize]
+	byte		*samples;	// [numstyles*surfsize*3]
 
 	struct msurface_s *nextalphasurface;
 } msurface_t;
@@ -161,6 +161,7 @@ typedef struct model_s
 	// volume occupied by the model graphics
 	//
 	vec3_t		mins, maxs;
+	float		radius;
 
 	//
 	// solid volume for clipping (sent from server)
@@ -174,7 +175,7 @@ typedef struct model_s
 	int		firstmodelsurface, nummodelsurfaces;
 
 	int		numsubmodels;
-	dmodel_t	*submodels;
+	struct model_s	*submodels;
 
 	int		numplanes;
 	cplane_t	*planes;
@@ -212,14 +213,16 @@ typedef struct model_s
 	image_t		*skins[MAX_MD2SKINS];
 	void		*extradata;
 	int		extradatasize;
+
+	// submodules
+	vec3_t		origin;	// for sounds or lights
 } model_t;
 
 //============================================================================
 
 void	Mod_Init(void);
 
-mleaf_t *Mod_PointInLeaf(float *p, model_t *model);
-byte	*Mod_ClusterPVS(int cluster, model_t *model);
+const byte *Mod_ClusterPVS(int cluster, const model_t *model);
 
 void Mod_Modellist_f(void);
 void Mod_FreeAll(void);

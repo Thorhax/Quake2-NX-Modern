@@ -60,6 +60,9 @@ static void *game_library;
 // Evil hack to determine if stdin is available
 qboolean stdin_active = true;
 
+// Terminal supports colors
+static qboolean color_active = false;
+
 // Config dir
 char cfgdir[MAX_OSPATH] = CFGDIR;
 
@@ -130,6 +133,37 @@ Sys_Quit(void)
 void
 Sys_Init(void)
 {
+	char *envvar;
+
+	envvar = getenv("TERM");
+	if (envvar && strstr(envvar, "color"))
+	{
+		char buf[256];
+
+		color_active = true;
+
+		snprintf(buf, sizeof(buf),
+			"\2Terminal supports colors: TERM='%s'\n", envvar);
+
+		Sys_ConsoleOutput(buf);
+		return;
+	}
+
+	envvar = getenv("COLORTERM");
+	if (envvar && strlen(envvar))
+	{
+		char buf[256];
+		color_active = true;
+
+		snprintf(buf, sizeof(buf),
+			"\2Terminal supports colors: COLORTERM='%s'\n", envvar);
+
+		Sys_ConsoleOutput(buf);
+		return;
+	}
+
+	Sys_ConsoleOutput("Terminal has no colors support.\n");
+
 }
 
 /* ================================================================ */
@@ -183,6 +217,29 @@ Sys_ConsoleInput(void)
 void
 Sys_ConsoleOutput(char *string)
 {
+	if ((string[0] == 0x01) || (string[0] == 0x02))
+	{
+		if (color_active)
+		{
+			if (string[0] == 0x01)
+			{
+				/* red */
+				fputs("\033[31;1m", stdout);
+			}
+			else
+			{
+				/* green */
+				fputs("\033[32;1m", stdout);
+			}
+
+			fputs(string + 1, stdout);
+
+			/* reset to default terminal settings */
+			fputs("\033[0m", stdout);
+			return;
+		}
+	}
+
 	fputs(string, stdout);
 }
 
@@ -412,7 +469,11 @@ Sys_GetGameAPI(void *parms)
 
 		fclose(fp);
 
+#ifdef USE_SANITIZER
+		game_library = dlopen(name, RTLD_NOW | RTLD_NODELETE);
+#else
 		game_library = dlopen(name, RTLD_NOW);
+#endif
 
 		if (game_library)
 		{
@@ -511,7 +572,11 @@ Sys_GetHomeDir(void)
 		return NULL;
 	}
 
+#ifndef __HAIKU__
 	snprintf(gdir, sizeof(gdir), "%s/%s/", home, cfgdir);
+#else
+	snprintf(gdir, sizeof(gdir), "%s/config/settings/%s", home, cfgdir);
+#endif
 	Sys_Mkdir(gdir);
 
 	return gdir;
@@ -549,7 +614,7 @@ Sys_RemoveDir(const char *path)
 	}
 }
 
-void
+qboolean
 Sys_Realpath(const char *in, char *out, size_t size)
 {
 #ifdef __SWITCH__
@@ -560,12 +625,15 @@ Sys_Realpath(const char *in, char *out, size_t size)
 
 	if (converted == NULL)
 	{
-		Com_Error(ERR_FATAL, "Couldn't get realpath for %s\n", in);
+		Com_Printf("Couldn't get realpath for %s\n", in);
+		return false;
 	}
 
 	Q_strlcpy(out, converted, size);
 	free(converted);
 #endif
+
+	return true;
 }
 
 /* ================================================================ */
@@ -606,7 +674,11 @@ Sys_LoadLibrary(const char *path, const char *sym, void **handle)
 
 	*handle = NULL;
 
+#ifdef USE_SANITIZER
+	module = dlopen(path, RTLD_LAZY | RTLD_NODELETE);
+#else
 	module = dlopen(path, RTLD_LAZY);
+#endif
 
 	if (!module)
 	{

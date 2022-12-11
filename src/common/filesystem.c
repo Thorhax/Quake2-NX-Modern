@@ -25,12 +25,15 @@
  * =======================================================================
  */
 
+#ifndef _MSC_VER
+#include <libgen.h>
+#endif
+
 #include "header/common.h"
 #include "header/glob.h"
 #include "unzip/unzip.h"
 
 #include "../client/sound/header/vorbis.h"
-
 
 #define MAX_HANDLES 512
 #define MAX_MODS 32
@@ -368,13 +371,65 @@ FS_FCloseFile(fileHandle_t f)
  * for streaming data out of either a pak file or a seperate file.
  */
 int
-FS_FOpenFile(const char *name, fileHandle_t *f, qboolean gamedir_only)
+FS_FOpenFile(const char *rawname, fileHandle_t *f, qboolean gamedir_only)
 {
 	char path[MAX_OSPATH], lwrName[MAX_OSPATH];
 	fsHandle_t *handle;
 	fsPack_t *pack;
 	fsSearchPath_t *search;
 	int i;
+
+	// Remove self references and empty dirs from the requested path.
+	// ZIPs and PAKs don't support them, but they may be hardcoded in
+	// some custom maps or models.
+	char name[MAX_QPATH] = {0};
+	size_t namelen = strlen(rawname);
+	for (int input = 0, output = 0; input < namelen; input++)
+	{
+		// Remove self reference.
+		if (rawname[input] == '.')
+		{
+			if (output > 0)
+			{
+				// Inside the path.
+				if (name[output - 1] == '/' && rawname[input + 1] == '/')
+				{
+					input++;
+					continue;
+				}
+			}
+			else
+			{
+				// At the beginning. Note: This is save because the Quake II
+				// VFS doesn't have a current working dir. Paths are always
+				// absolute.
+				if (rawname[input + 1] == '/')
+				{
+					continue;
+				}
+			}
+		}
+
+		// Empty dir.
+		if (rawname[input] == '/')
+		{
+			if (rawname[input + 1] == '/')
+			{
+				continue;
+			}
+		}
+
+		// Pathes starting with a /. I'm not sure if this is
+		// a problem. It shouldn't hurt to remove the leading
+		// slash, though.
+		if (rawname[input] == '/' && output == 0)
+		{
+			continue;
+		}
+
+		name[output] = rawname[input];
+		output++;
+	}
 
 	file_from_protected_pak = false;
 	handle = FS_HandleForFile(name, f);
@@ -685,6 +740,52 @@ FS_FreeFile(void *buffer)
 	}
 
 	Z_Free(buffer);
+}
+
+fsRawPath_t *FS_FreeRawPaths(fsRawPath_t *start, fsRawPath_t *end)
+{
+	fsRawPath_t *cur = start;
+	fsRawPath_t *next;
+
+	while (cur != end)
+	{
+		next = cur->next;
+		Z_Free(cur);
+		cur = next;
+	}
+
+	return cur;
+}
+
+fsSearchPath_t *FS_FreeSearchPaths(fsSearchPath_t *start, fsSearchPath_t *end)
+{
+	fsSearchPath_t *cur = start;
+	fsSearchPath_t *next;
+
+	while (cur != end)
+	{
+		if (cur->pack)
+		{
+			if (cur->pack->pak)
+			{
+				fclose(cur->pack->pak);
+			}
+
+			if (cur->pack->pk3)
+			{
+				unzClose(cur->pack->pk3);
+			}
+
+			Z_Free(cur->pack->files);
+			Z_Free(cur->pack);
+		}
+
+		next = cur->next;
+		Z_Free(cur);
+		cur = next;
+	}
+
+	return cur;
 }
 
 /*
@@ -1249,9 +1350,37 @@ FS_FreeList(char **list, int nfiles)
 	for (i = 0; i < nfiles - 1; i++)
 	{
 		free(list[i]);
+		list[i] = 0;
 	}
 
 	free(list);
+	list = 0;
+}
+
+/*
+ * Comparator for mod sorting
+ */
+static int
+Q_sort_modcmp(const void *p1, const void *p2)
+{
+	static const char *first_mods[] = {BASEDIRNAME, "xatrix", "rogue", "ctf"};
+	static const unsigned short int first_mods_qty = 4;
+
+	const char * s1 = * (char * const *)p1;
+	const char * s2 = * (char * const *)p2;
+
+	for (unsigned short int i = 0; i < first_mods_qty; i++)
+	{
+		if (!strcmp(first_mods[i], s1))
+		{
+			return -1;
+		}
+		if (!strcmp(first_mods[i], s2))
+		{
+			return 1;
+		}
+	}
+	return strcmp(s1, s2);
 }
 
 /*
@@ -1349,7 +1478,7 @@ FS_ListMods(int *nummods)
 
 	modnames[nmods] = 0;
 
-	qsort(modnames, nmods, sizeof(modnames[0]), Q_sort_strcomp);
+	qsort(modnames, nmods, sizeof(modnames[0]), Q_sort_modcmp);
 
 	*nummods = nmods;
 	return modnames;
@@ -1515,23 +1644,42 @@ FS_GetNextRawPath(const char* lastRawPath)
 	return NULL;
 }
 
+#ifdef _MSC_VER // looks like MSVC/the Windows CRT doesn't have basename()
+// returns the last part of the given pathname, after last (back)slash
+// if the last character is a (back)slash, it's removed (set to '\0')
+static char* basename( char* n )
+{
+	size_t l = strlen(n);
+	while (n[l - 1] == '\\' || n[l - 1] == '/') // cut off trailing (back)slashes, if any
+	{
+		--l;
+		n[l] = '\0';
+	}
+	char* r1 = strrchr(n, '\\');
+	char* r2 = strrchr(n, '/');
+	if (r1 != NULL)
+		return (r2 == NULL || r1 > r2) ? (r1 + 1) : (r2 + 1);
+	return (r2 != NULL) ? (r2 + 1) : n;
+}
+#endif // _MSC_VER
+
 void
 FS_AddDirToSearchPath(char *dir, qboolean create) {
+	char *file;
 	char **list;
 	char path[MAX_OSPATH];
-	int i, j;
+	char *tmp;
+	int i, j, k;
 	int nfiles;
 	fsPack_t *pack = NULL;
 	fsSearchPath_t *search;
+	qboolean nextpak;
 	size_t len = strlen(dir);
 
 	// The directory must not end with an /. It would
 	// f*ck up the logic in other parts of the game...
-	if (dir[len - 1] == '/')
+	if (dir[len - 1] == '/' || dir[len - 1] == '\\')
 	{
-		dir[len - 1] = '\0';
-	}
-	else if (dir[len - 1] == '\\') {
 		dir[len - 1] = '\0';
 	}
 
@@ -1540,7 +1688,8 @@ FS_AddDirToSearchPath(char *dir, qboolean create) {
 	// be the last directory added to the search path.
 	Q_strlcpy(fs_gamedir, dir, sizeof(fs_gamedir));
 
-	if (create) {
+	if (create)
+	{
 		FS_CreatePath(fs_gamedir);
 	}
 
@@ -1550,11 +1699,15 @@ FS_AddDirToSearchPath(char *dir, qboolean create) {
 	search->next = fs_searchPaths;
 	fs_searchPaths = search;
 
-	// We need to add numbered paks in the directory in
-	// sequence and all other paks after them. Otherwise
-	// the gamedata may break.
-	for (i = 0; i < sizeof(fs_packtypes) / sizeof(fs_packtypes[0]); i++) {
-		for (j = 0; j < MAX_PAKS; j++) {
+
+	// Numbered paks contain the official game data, they
+	// need to be added first and are marked protected.
+	// Files from protected paks are never offered for
+	// download.
+	for (i = 0; i < sizeof(fs_packtypes) / sizeof(fs_packtypes[0]); i++)
+	{
+		for (j = 0; j < MAX_PAKS; j++)
+		{
 			Com_sprintf(path, sizeof(path), "%s/pak%d.%s", dir, j, fs_packtypes[i].suffix);
 
 			switch (fs_packtypes[i].format)
@@ -1591,8 +1744,13 @@ FS_AddDirToSearchPath(char *dir, qboolean create) {
 		}
 	}
 
-	// And as said above all other pak files.
-	for (i = 0; i < sizeof(fs_packtypes) / sizeof(fs_packtypes[0]); i++) {
+	// All other pak files are added after the numbered paks.
+	// They aren't sorted in any way, but added in the same
+	// sequence as they're returned by FS_ListFiles. This is
+	// fragile and file system dependend. We cannot change
+	// this, since it might break existing installations.
+	for (i = 0; i < sizeof(fs_packtypes) / sizeof(fs_packtypes[0]); i++)
+	{
 		Com_sprintf(path, sizeof(path), "%s/*.%s", dir, fs_packtypes[i].suffix);
 
 		// Nothing here, next pak type please.
@@ -1601,14 +1759,33 @@ FS_AddDirToSearchPath(char *dir, qboolean create) {
 			continue;
 		}
 
-		Com_sprintf(path, sizeof(path), "%s/pak*.%s", dir, fs_packtypes[i].suffix);
-
 		for (j = 0; j < nfiles - 1; j++)
 		{
-			// If the pak starts with the string 'pak' it's ignored.
-			// This is somewhat stupid, it would be better to ignore
-			// just pak%d...
-			if (glob_match(path, list[j]))
+			// Sort out numbered paks. This is as inefficient as
+			// it can be, but it doesn't matter. This is done only
+			// once at client or game startup.
+			nextpak = false;
+
+			for (k = 0; k < MAX_PAKS; k++)
+			{
+				// basename() may alter the given string.
+				// We need to work around that...
+				tmp = strdup(list[j]);
+				file = basename(tmp);
+
+				Com_sprintf(path, sizeof(path), "pak%d.%s", k, fs_packtypes[i].suffix);
+
+				if (Q_strcasecmp(path, file) == 0)
+				{
+					nextpak = true;
+					free(tmp);
+					break;
+				}
+
+				free(tmp);
+			}
+
+			if (nextpak)
 			{
 				continue;
 			}
@@ -1669,7 +1846,18 @@ void FS_BuildGenericSearchPath(void) {
 	Sys_Mkdir(path);
 }
 
+// filesystem.c is used by the client and the server,
+// it includes common.h only. Not the client not the
+// server header. The game reset logic messes with
+// client state, so we need some forwar declarations
+// here.
+#ifndef DEDICATED_ONLY
+// Variables
+extern qboolean menu_startdemoloop;
+
+// Functions
 void CL_WriteConfiguration(void);
+#endif
 
 void
 FS_BuildGameSpecificSearchPath(char *dir)
@@ -1680,7 +1868,6 @@ FS_BuildGameSpecificSearchPath(char *dir)
 	char path[MAX_OSPATH];
 	int i;
 	fsRawPath_t *search;
-	fsSearchPath_t *next;
 
 #ifndef DEDICATED_ONLY
 	// Write the config. Otherwise changes made by the
@@ -1705,28 +1892,7 @@ FS_BuildGameSpecificSearchPath(char *dir)
 	// We may already have specialised directories in our search
 	// path. This can happen if the server changes the mod. Let's
 	// remove them.
-	while (fs_searchPaths != fs_baseSearchPaths)
-	{
-		if (fs_searchPaths->pack)
-		{
-			if (fs_searchPaths->pack->pak)
-			{
-				fclose(fs_searchPaths->pack->pak);
-			}
-
-			if (fs_searchPaths->pack->pk3)
-			{
-				unzClose(fs_searchPaths->pack->pk3);
-			}
-
-			Z_Free(fs_searchPaths->pack->files);
-			Z_Free(fs_searchPaths->pack);
-		}
-
-		next = fs_searchPaths->next;
-		Z_Free(fs_searchPaths);
-		fs_searchPaths = next;
-	}
+	fs_searchPaths = FS_FreeSearchPaths(fs_searchPaths, fs_baseSearchPaths);
 
 	/* Close open files for game dir. */
 	for (i = 0; i < MAX_HANDLES; i++)
@@ -1795,6 +1961,21 @@ FS_BuildGameSpecificSearchPath(char *dir)
 		free(mapnames);
 		mapnames = NULL;
 	}
+
+	// Start the demoloop, if requested. This is kind of hacky: Normaly the
+	// demo loop would be started by the menu, after changeing the 'game'
+	// cvar. However, the demo loop is implemented by aliases. Since the
+	// game isn't changed right after the cvar is set (but when the control
+	// flow enters this function) the aliases evaulate to the wrong game.
+	// Work around that by injection the demo loop into the command buffer
+	// here, right after the game was changed. Do it only when the game was
+	// changed though the menu, otherwise we might break into the demo loop
+	// after we've received a latched cvar from the server.
+	if (menu_startdemoloop)
+	{
+		Cbuf_AddText("d1\n");
+		menu_startdemoloop = false;
+	}
 #endif
 }
 
@@ -1812,11 +1993,19 @@ const char* FS_GetFilenameForHandle(fileHandle_t f)
 
 // --------
 
-void FS_AddDirToRawPath (const char *rawdir, qboolean create) {
+static void FS_AddDirToRawPath (const char *rawdir, qboolean create, qboolean required) {
 	char dir[MAX_OSPATH] = {0};
 
 	// Get the realpath.
-	Sys_Realpath(rawdir, dir, sizeof(dir));
+	if (!Sys_Realpath(rawdir, dir, sizeof(dir)))
+	{
+		if (required)
+		{
+			Com_Error(ERR_FATAL, "Couldn't add required directory %s to search path\n", rawdir);
+		}
+
+		return;
+	}
 
 	// Convert backslashes to forward slashes.
 	for (int i = 0; i < strlen(dir); i++)
@@ -1828,7 +2017,7 @@ void FS_AddDirToRawPath (const char *rawdir, qboolean create) {
 	}
 
 	// Make sure that the dir doesn't end with a slash.
-	for (size_t s = strlen(dir) - 1; s >= 0; s--)
+	for (size_t s = strlen(dir) - 1; s > 0; s--)
 	{
 		if (dir[s] == '/')
 		{
@@ -1859,36 +2048,43 @@ void FS_AddDirToRawPath (const char *rawdir, qboolean create) {
 
 
 void FS_BuildRawPath(void) {
-	// Add $HOME/.yq2 (MUST be the last dir!)
+	// Add $HOME/.yq2, MUST be the last dir! Required,
+	// otherwise the config cannot be written.
 	if (!is_portable) {
 		const char *homedir = Sys_GetHomeDir();
 
 		if (homedir != NULL) {
-			FS_AddDirToRawPath(homedir, true);
+			FS_AddDirToRawPath(homedir, true, true);
 		}
 	}
 
-	// Add $binarydir
+	// Add binary dir. Required, because the renderer
+	// libraries are loaded from it.
 	const char *binarydir = Sys_GetBinaryDir();
 
 	if(binarydir[0] != '\0')
 	{
-		FS_AddDirToRawPath(binarydir, false);
+		FS_AddDirToRawPath(binarydir, false, true);
 	}
 
-	// Add $basedir/
-	FS_AddDirToRawPath(datadir, false);
+	// Add data dir. Required, when the user gives us
+	// a data dir he expects it in a working state.
+	FS_AddDirToRawPath(datadir, false, true);
 
-	// Add SYSTEMDIR
+	// Add SYSTEMDIR. Optional, the user may have a
+	// binary compiled with SYSTEMWIDE (installed from
+	// packages), but no systemwide game data.
 #ifdef SYSTEMWIDE
-	FS_AddDirToRawPath(SYSTEMDIR, false);
+	FS_AddDirToRawPath(SYSTEMDIR, false, false);
 #endif
 
 	// The CD must be the last directory of the path,
 	// otherwise we cannot be sure that the game won't
-	// stream the videos from the CD.
+	// stream the videos from the CD. Required, if the
+	// user sets a CD path, he expects data getting
+	// read from the CD.
 	if (fs_cddir->string[0] != '\0') {
-		FS_AddDirToRawPath(fs_cddir->string, false);
+		FS_AddDirToRawPath(fs_cddir->string, false, true);
 	}
 }
 
@@ -1943,4 +2139,14 @@ FS_InitFilesystem(void)
 
 	// Debug output
 	Com_Printf("Using '%s' for writing.\n", fs_gamedir);
+}
+
+
+void
+FS_ShutdownFilesystem(void)
+{
+	fs_searchPaths = FS_FreeSearchPaths(fs_searchPaths, NULL);
+	fs_rawPath = FS_FreeRawPaths(fs_rawPath, NULL);
+
+	fs_baseSearchPaths = NULL;
 }

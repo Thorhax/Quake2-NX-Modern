@@ -9,7 +9,7 @@ have been renamed. The prefixes are:
 * `cl_`: Client.
 * `gl_`: Common to all OpenGL renderers.
 * `gl1_`: OpenGL 1.4 renderer.
-* `gl3_`: OpenGL 3.2 renderer.
+* `gl3_`: OpenGL 3.2 and OpenGL ES3 renderers.
 * `ogg_`: Ogg/Vorbis music playback.
 * `r_`: Common to all renderers.
 * `s_`: Sound system.
@@ -33,6 +33,7 @@ it's `+set busywait 0` (setting the `busywait` cvar) and `-portable`
 (setting the `portable` argument).
 
 * **cfgdir**: The name (not the path) of the configuration directory.
+
 * **datadir**: Directory from which the game data is loaded. Can be used
   in startup scripts, to test binaries, etc. If not set, the directory
   containing the binaries is used.
@@ -47,33 +48,77 @@ it's `+set busywait 0` (setting the `busywait` cvar) and `-portable`
 * **aimfix**: Fix aiming. When set to to `0` (the default) aiming is
   slightly inaccurate, bullets and the like have a little drift. When
   set to `1` they hit exactly were the crosshair is.
-
+  
 * **busywait**: By default this is set to `1`, causing Quake II to spin
   in a very tight loop until it's time to process the next frame. This
   is a very accurate way to determine the internal timing, but comes with
   a relatively high CPU usage. If set to `0` Quake II lays itself to
   sleep and tells the operating system to send a wakeup signal when it's
-  time for the next frame. The later is more CPU friendly but rather
-  inaccurate, especially on Windows. Use with care.
+  time for the next frame. The latter is more CPU friendly but can be
+  rather inaccurate, especially on Windows. Use with care.
+
+* **cl_maxfps**: The approximate framerate for client/server ("packet")
+  frames if *cl_async* is `1`. If set to `-1` (the default), the engine
+  will choose a packet framerate appropriate for the render framerate.  
+  See `cl_async` for more information.
+
+* **cl_async**: Run render frames independently of client/server frames.  
+  If set to `0`, client, server (gamecode) and the renderer run synchronous,
+  (like Quake2 originally did) which means that for every rendered frame
+  a client- and server-frame is executed, which includes the gamecode and
+  physics/movement-simulation etc. At higher framerates (above 95 or so)
+  this leads to movement bugs, like being able to jump higher than expected
+  (kind of like the infamous Quake 3 125Hz bug).  
+  For `cl_async 0`, *vid_maxfps* (or, if vsync is enabled, the display
+  refresh rate) is used and *cl_maxfps* is ignored.
+  
+  If *cl_async* is set to `1` (the default) the client is asynchronous,
+  which means that there can be multiple render frames between client-
+  and server-frames. This makes it possible to renderer as many frames
+  as desired without physics and movement problems. 
+  The client framerate is controlled by *cl_maxfps*,
+  the renderer framerate is controlled by *vid_maxfps*.  
+  
+  As client/server frames ("packet frames") are only run together with
+  a render frame, the *real* client/server framerate is always rounded to
+  a fraction of the renderframerate that's closest to *cl_maxfps*.  
+  So if for example *vid_maxfps* is `60` and *cl_maxfps* is `50`, it will
+  be rounded to `60` and every renderframe is also a packet frame.  
+  If *vid_maxfps* is `60` and *cl_maxfps* is `40`, it will be rounded to
+  `30` and every second render frame is also a packet frame.
+  
+  It seems like the best working packet framerate is `60` (which means that
+  the render framerate should be a multiple of that), otherwise values
+  between `45` and `90` seem to work ok, lower and higher values can lead
+  to buggy movement, jittering and other issues.  
+  Setting *cl_maxfps* to `-1` (the default since 8.02) will automatically
+  choose a packet framerate that's *both* a fraction of *vid_maxfps*
+  (or display refreshrate if vsync is on) *and* between 45 and 90.
+  
+* **cl_http_downloads**: Allow HTTP download. Set to `1` by default, set
+  to `0` to disable.
+
+* **cl_http_filelists**: Allow downloading and processing of filelists.
+  A filelist can contain an arbitrary number of files which are
+  downloaded as soon asthe filelist is found on the server. Set to `1`
+  by default, set to `0` to disable.
+
+* **cl_http_max_connections**: Maximum number of parallel downloads. Set
+  to `4` by default. A higher number may help with slow servers.
+
+* **cl_http_proxy**: Proxy to use, empty by default.
+
+* **cl_http_show_dw_progress**: Show a HTTP download progress bar.
+
+* **cl_http_bw_limit_rate**: Average speed transfer threshold for
+`cl_http_bw_limit_tmout` variable. Set `0` by default.
+
+* **cl_http_bw_limit_tmout**: Seconds before the download is aborted
+when the speed transfer is below the var set by `cl_http_bw_limit_rate`.
+Set `0` by default.
 
 * **cl_kickangles**: If set to `0` angle kicks (weapon recoil, damage
   hits and the like) are ignored. Cheat-protected. Defaults to `1`.
-
-* **cl_async**: If set to `1` (the default) the client is asynchronous.
-  The client framerate is fixed, the renderer framerate is variable.
-  This makes it possible to renderer as many frames as desired without
-  any physics and movement problems. The client framerate is controlled
-  by *cl_maxfps*, set to `60` by default. The renderer framerate is
-  controlled by *vid_maxfps*. There are two constraints:
-
-  * *vid_maxfps* must be the same or greater than *cl_maxfps*.
-  * In case that the vsync is active, *vid_maxfps* must not be lower
-	than the display refresh rate.
-
-  Both constraints are enforced.
-
-  If *cl_async* is set to `0` *vid_maxfps* is the same as *cl_maxfps*,
-  use *cl_maxfps* to set the framerate.
 
 * **cl_limitsparksounds**: If set to `1` the number of sound generated
   when shooting into power screen and power shields is limited to 16.
@@ -94,6 +139,12 @@ it's `+set busywait 0` (setting the `busywait` cvar) and `-portable`
 
 * **cl_showfps**: Shows the framecounter. Set to `2` for more and to
   `3` for even more informations.
+
+* **cl_model_preview_start**: start frame value in multiplayer model preview.
+  `-1` - don't show animation. Defaults to `84` for show salute animation.
+
+* **cl_model_preview_end**: end frame value in multiplayer model preview.
+  `-1` - don't show animation. Defaults to `94` for show salute animation.
 
 * **in_grab**: Defines how the mouse is grabbed by Yamagi Quake IIs
   window. If set to `0` the mouse is never grabbed and if set to `1`
@@ -143,16 +194,30 @@ it's `+set busywait 0` (setting the `busywait` cvar) and `-portable`
   indestructible.
 
 * **g_footsteps**: If set to `1` (the default) footstep sounds are
-  generated when the player faster than 255. This is the behaviour of
-  Vanilla Quake II. If set to `2` footestep sound always generated. If
-  set to `0` footstep sounds are never generated. Cheat protected to
-  `1`.
+  generated when the player is on ground and faster than 255. This is
+  the behaviour of Vanilla Quake II. If set to `2` footestep sound
+  always generated as long as the player is on ground. If set to `3`
+  footsteps are always generated. If set to `0` footstep sounds are
+  never generated. Cheat protected to `1`. Note that there isn't a
+  reliable way to figure out if the player is on ground. Footsteps
+  may not be generated in all circumstances, especially when the player
+  is moving over stairs and slopes.
+
+* **g_monsterfootsteps**: If set to `1` monster footstep are generated.
+  By default this cvar is disabled (set to 0). Additional footstep
+  sounds are required. See the installation guide for details.
 
 * **g_fix_triggered**: This cvar, when set to `1`, forces monsters to
   spawn in normally if they are set to a triggered spawn but do not
   have a targetname. There are a few cases of this in GroundZero and
   The Reckoning. This cvar is disabled by default to maintain the
   original gameplay experience.
+
+* **g_machinegun_norecoil**: Disable machine gun recoil in single player. 
+  By default this is set to `0`, this keeps the original machine gun 
+  recoil in single player. When set to `1` the recoil is disabled in
+  single player, the same way as in multiplayer.
+  This cvar only works if the game.dll implements this behaviour.
 
 * **g_disruptor (Ground Zero only)**: This boolean cvar controls the
   availability of the Disruptor weapon to players. The Disruptor is
@@ -162,7 +227,7 @@ it's `+set busywait 0` (setting the `busywait` cvar) and `-portable`
   2nd Widow boss' tracker weapon - a black-ish ball of energy.
   When this cvar is set to 1 you can use the "give Disruptor" and
   "give rounds X" commands to give yourself the weapon and its ammo,
-  and its items, weapon_disintegrator and ammo_disruptor, can be
+  and its items, weapon\_disintegrator and ammo\_disruptor, can be
   spawned in maps (in fact, some official Ground Zero maps contain
   these entities). This cvar is set to 0 by default.
 
@@ -200,6 +265,15 @@ it's `+set busywait 0` (setting the `busywait` cvar) and `-portable`
 
 * **s_underwater**: Dampen sounds if submerged. Enabled by default.
 
+* **s_occlusion_strength**: If set bigger than `0` sound occlusion effects
+  are enabled. This is only supported by the OpenAL sound backend. By
+  default this cvar is disabled (set to 0).
+
+* **s_reverb_preset**: Enable reverb effect. By default this cvar is disabled
+  (set to `-1`). Possibe values:
+  `-2`: Auto reverb effect select,
+  `-1`: Disable reverb effect,
+  `>=0`: select predefined effect.
 
 ## Graphics (all renderers)
 
@@ -263,14 +337,24 @@ it's `+set busywait 0` (setting the `busywait` cvar) and `-portable`
   anti aliasing is expensive and can lead to a huge performance hit, so
   try setting it to a lower value if the framerate is too low.
 
-* **r_nolerp_list**: list separate by spaces of textures omitted from
-  bilinear filtering. Used by default to exclude the console and HUD
-  fonts.  Make sure to include the default values when extending the
-  list.
+* **r_videos_unfiltered**: If set to `1`, don't use bilinear texture
+  filtering on videos (defaults to `0`).
+
+* **r_2D_unfiltered**: If set to `1`, don't filter textures of 2D
+  elements like menus and the HUD (defaults to `0`).
+
+* **r_lerp_list**: List separated by spaces of 2D textures that *should*
+  be filtered bilinearly, even if `r_2D_unfiltered` is set to `1`.
+
+* **r_nolerp_list**: List separated by spaces of textures omitted from
+  bilinear filtering (mostly relevant if `r_2D_unfiltered` is `0`).
+  Used by default to exclude the console and HUD font and crosshairs.
+  Make sure to include the default values when extending the list.
 
 * **r_retexturing**: If set to `1` (the default) and a retexturing pack
   is installed, the high resolution textures are used.
-  If set to `2` and vulkan render is used, scale up all 8bit textures.
+
+* **r_scale8bittextures**: If set to `1`, scale up all 8bit textures.
 
 * **r_shadows**: Enables rendering of shadows. Quake IIs shadows are
   very simple and are prone to render errors.
@@ -297,17 +381,16 @@ it's `+set busywait 0` (setting the `busywait` cvar) and `-portable`
   It's recommended to use the displays native resolution with the
   fullscreen window, use `r_mode -2` to switch to it.
 
-* **vid_maxfps**: The maximum framerate, if `cl_async` is `1`. Otherwise
-  `cl_maxfps` is used as maximum framerate. See `cl_async` description
-  above for more information.  *Note* that vsync (`r_vsync`) also
-  restricts the framerate to the monitor refresh rate, so if vsync is
-  enabled, the game won't render more than frame than the display can
-  show.
+* **vid_maxfps**: The maximum framerate. *Note* that vsync (`r_vsync`) 
+  also restricts the framerate to the monitor refresh rate, so if vsync
+  is enabled, the game won't render more than frame than the display can
+  show. Defaults to `300`.  
+  Related to this: *cl_maxfps* and *cl_async*.
 
 * **vid_renderer**: Selects the renderer library. Possible options are
-  `gl1` (the default) for the old OpenGL 1.4 renderer, `gl3` for the new
-  OpenGL 3.2 renderer, `soft` for the software renderer and `vk` for the
-  Vulkan renderer.
+  `gl1` (the default) for the old OpenGL 1.4 renderer, `gl3` for the
+  OpenGL 3.2 renderer, `gles3` for the OpenGL ES3 renderer
+  and `soft` for the software renderer.
 
 
 ## Graphics (GL renderers only)
@@ -317,6 +400,15 @@ it's `+set busywait 0` (setting the `busywait` cvar) and `-portable`
   the overlapping surfaces to mitigate the flickering. This may make
   things better or worse, depending on the map.
 
+* **gl_texturemode**: How textures are filtered.
+  - `GL_NEAREST`: No filtering (using value of *nearest* source pixel),
+    mipmaps not used
+  - `GL_LINEAR`: Bilinear filtering, mipmaps not used
+  - `GL_LINEAR_MIPMAP_NEAREST`: The default - Bilinear filtering when
+    scaling up, using mipmaps with nearest/no filtering when scaling down
+  
+  Other supported values: `GL_NEAREST_MIPMAP_NEAREST`,
+  `GL_NEAREST_MIPMAP_LINEAR`, `GL_LINEAR_MIPMAP_LINEAR`
 
 ## Graphics (OpenGL 1.4 only)
 
@@ -337,7 +429,7 @@ it's `+set busywait 0` (setting the `busywait` cvar) and `-portable`
   look a bit better (no flickering) by using the stencil buffer.
 
 
-## Graphics (OpenGL 3.2 only)
+## Graphics (OpenGL 3.2 and OpenGL ES3 only)
 
 * **gl3_debugcontext**: Enables the OpenGL 3.2 renderers debug context,
   e.g. prints warnings and errors emitted by the GPU driver.  Not
@@ -368,101 +460,91 @@ it's `+set busywait 0` (setting the `busywait` cvar) and `-portable`
 * **gl3_particle_square**: If set to `1`, particles are rendered as
   squares, like in the old software renderer or Quake 1. Default is `0`.
 
+* **gl3_colorlight**: When set to `0`, the lights and lightmaps are
+  colorless (greyscale-only), like in the original soft renderer.
+  Default is `1`.
+
+* **gl3_usefbo**: When set to `1` (the default), an OpenGL Framebuffer
+  Object is used to implement a warping underwater-effect (like the
+  software renderer has). Set to `0` to disable this, in case you don't
+  like the effect or it's too slow on your machine.
+
 
 ## Graphics (Software only)
 
 * **sw_gunzposition**: Z offset for the gun. In the original code this
   was always `0`, which will draw the gun too near to the player if a
-  custom gun field of few is used. Defaults to `8`, which is more or
+  custom gun field of view is used. Defaults to `8`, which is more or
   less optimal for the default gun field of view of 80.
 
+* **sw_colorlight**: enable experimental color lighting.
 
-## Graphics (Vulkan only)
 
-* **vk_validation**: Toggle validation layers:
-  * `0` - disabled (default in Release)
-  * `1` - only errors and warnings
-  * `2` - best-practices validation
+## Game Controller
 
-* **vk_strings**: Print some basic Vulkan/GPU information.
+* **in_initjoy**: Toggles initialization of game controller. Default is
+  `1`, which enables gamepad usage; `0` disables its detection at
+  startup. Can only be set from command line.
 
-* **vk_mem**: Print dynamic vertex/index/uniform/triangle fan buffer
-  memory usage statistics.
+* **in_sdlbackbutton**: Defines which button is used in the gamepad or
+  joystick as the `Esc` key, to access the main menu and 'cancel' /
+  'go back' on its options. Default is `0`, which corresponds to the
+  Back/Select/Minus button. Set to `1` to use Start/Menu/Plus, and to
+  `2` to use the Guide/Home/PS button. Requires a game restart
+  (or controller replug) when changed.
 
-* **vk_device**: Specify index of the preferred Vulkan device on systems
-  with multiple GPUs:
-  * `-1` - prefer first DISCRETE_GPU (default)
-  * `0..n` - use device #n (full list of devices is returned by
-    `vk_strings` command)
+* **joy_layout**: Allows to select the stick layout of the gamepad.
+  - `0`: *Default*, left stick moves, right aims
+  - `1`: *Southpaw*, same as previous one with inverted sticks
+  - `2`: *Legacy*, left moves forward/backward and turns, right strafes
+    and looks up/down
+  - `3`: *Legacy Southpaw*, inverted sticks version of previous one
+  - `4`: *Flick Stick*, left stick moves, right checks your surroundings
+    in 360º, gyro required for looking up/down
+  - `5`: *Flick Stick Southpaw*, swapped sticks version of last one
 
-* **vk_sampleshading**: Toggle sample shading for MSAA. (default: `1`)
+* **joy_left_deadzone** / **joy_right_deadzone**: Inner, circular
+  deadzone for each stick, where inputs below this radius will be
+  ignored. Default is `0.16` (16% of possible stick travel).
 
-* **vk_flashblend**: Toggle the blending of lights onto the environment.
-  (default: `0`)
+* **joy_left_snapaxis** / **joy_right_snapaxis**: Ratio on the value of
+  one axis (X or Y) to snap you to the other. It creates an axial
+  deadzone with the shape of a "bowtie", which will help you to do
+  perfectly horizontal or vertical movements the more you mark a
+  direction with the stick. Increasing this too much will reduce speed
+  for the diagonals, but will help you to mark 90º/180º turns with Flick
+  Stick. Default `0.15`.
 
-* **vk_polyblend**: Blend fullscreen effects: blood, powerups etc.
-  (default: `1`)
+* **joy_left_expo** / **joy_right_expo**: Exponents on the response
+  curve on each stick. Increasing this will make small movements to
+  represent much smaller inputs, which helps precision with the sticks.
+  `1.0` is linear. Default `2.0` (quadratic curve).
 
-* **vk_skymip**: Toggle the usage of mipmap information for the sky
-  graphics. (default: `0`)
+* **joy_flick_threshold**: Used only with Flick Stick, specifies the
+  distance from the center of the stick that will make the player flick
+  or rotate. Default `0.65` (65%).
 
-* **vk_finish**: Inserts a `vkDeviceWaitIdle()` call on frame render
-  start (default: `0`). Don't use this, it's there just for the sake of
-  having a `gl_finish` equivalent!
+* **joy_flick_smoothed**: Flick Stick only, rotations below this angle
+  (in degrees) will be smoothed. Reducing this will increase
+  responsiveness at the cost of jittery movement. Most gamepads will work
+  nicely with a value between 4.0 and 8.0. Default `8.0`.
 
-* **vk_custom_particles**: Toggle particles type:
-  * `0` - textured triangles for particle rendering
-  * `1` - between using POINT_LIST (default)
-  * `2` - textured square for particle rendering
+* **gyro_mode**: Operation mode for the gyroscope sensor of the game
+  controller. Options are `0` = always off, `1` = off with the
+  `+gyroaction` bind to enable, `2` = on with `+gyroaction` to
+  disable (default), `3` = always on.
 
-* **vk_particle_size**: Rendered particle size. (default: `40`)
+* **gyro_turning_axis**: Sets which gyro axis will be used for turning.
+  The default `0` is "yaw" (turn), for people who prefer to hold their
+  controller flat, like using a pointing device. `1` is "roll" (lean),
+  for people who hold the controller upright, or use a device with the
+  controller attached to the screen, e.g. Steam Deck.
 
-* **vk_particle_att_a**: Intensity of the particle A attribute.
-  (default: `0.01`)
-
-* **vk_particle_att_b**: Intensity of the particle B attribute.
-  (default: `0`)
-
-* **vk_particle_att_c**: Intensity of the particle C attribute.
- (default: `0.01`)
-
-* **vk_particle_min_size**: The minimum size of a rendered particle.
- (default: `2`)
-
-* **vk_particle_max_size**: The maximum size of a rendered particle.
-  (default: `40`)
-
-* **vk_picmip**: Shrink factor for the textures. (default: `0`)
-
-* **vk_pixel_size**: Pixel size when rendering the world, used to simulate
-  lower screen resolutions. The value represents the length, in pixels, of the
-  side of each pixel block. For example, with size 2 pixels are 2x2 squares,
-  and at 1600x1200 the image is effectively an upscaled 800x600 image.
-  (default: `1`)
-
-* **vk_dynamic**: Use dynamic lighting. (default: `1`)
-
-* **vk_showtris**: Display mesh triangles. (default: `0`)
-
-* **vk_lightmap**: Display lightmaps. (default: `0`)
-
-* **vk_postprocess**: Toggle additional color/gamma correction.
-  (default: `1`)
-
-* **vk_mip_nearfilter**: Use nearest-neighbor filtering for mipmaps.
-  (default: `0`)
-
-* **vk_texturemode**: Change current texture filtering mode:
-  * `VK_NEAREST` - nearest-neighbor interpolation, no mipmaps
-  * `VK_LINEAR` - linear interpolation, no mipmaps
-  * `VK_MIPMAP_NEAREST` - nearest-neighbor interpolation with mipmaps
-  * `VK_MIPMAP_LINEAR` - linear interpolation with mipmaps (default)
-
-* **vk_lmaptexturemode**: Same as `vk_texturemode` but applied to
-  lightmap textures.
-
-* **vk_underwater**: Warp the scene if underwater. Set to `0` to disable
-  the effect. Defaults to `1`.
+* **gyro_calibration_(x/y/z)**: Offset values on each axis of the gyro
+  which helps it reach true "zero movement", complete stillness. These
+  values are wrong if you see your in-game view "drift" when leaving
+  the controller alone. As these vary by device, it's better to use
+  'calibrate' in the 'gamepad' -> 'gyro' menu to set them.
 
 
 ## cvar operations

@@ -29,7 +29,7 @@
 
 #include "../../common/header/shared.h"
 
-#if defined(__linux) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#if defined(__linux) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__sun)
 #include <unistd.h> // readlink(), amongst others
 #endif
 
@@ -73,14 +73,18 @@ static void SetExecutablePath(char* exePath)
 		exePath[0] = '\0';
 	}
 
-#elif defined(__linux)
+#elif defined(__linux) || defined(__sun)
 
 	// all the platforms that have /proc/$pid/exe or similar that symlink the
 	// real executable - basiscally Linux and the BSDs except for FreeBSD which
 	// doesn't enable proc by default and has a sysctl() for this. OpenBSD once
 	// had /proc but removed it for security reasons.
 	char buf[PATH_MAX] = {0};
+#if defined(__linux)
 	snprintf(buf, sizeof(buf), "/proc/%d/exe", getpid());
+#else
+	snprintf(buf, sizeof(buf), "/proc/%ld/path/a.out", getpid());
+#endif
 	// readlink() doesn't null-terminate!
 	int len = readlink(buf, exePath, PATH_MAX-1);
 	if (len <= 0)
@@ -188,7 +192,7 @@ void Sys_SetupFPU(void) {
 }
 #else
 void Sys_SetupFPU(void) {
-#if defined(__arm__)
+#if defined(__arm__) && defined(__ARM_PCS_VFP)
 	// Enable RunFast mode if not enabled already
 	static const unsigned int bit = 0x04086060;
 	static const unsigned int fpscr = 0x03000000;

@@ -88,6 +88,7 @@ replacement_t replacements[] = {
 	{"gl_retexturing", "r_retexturing"},
 	{"gl_shadows", "r_shadows"},
 	{"gl_anisotropic", "r_anisotropic"},
+	{"gl_lightmap", "r_lighmap"},
 	{"intensity", "gl1_intensity"}
 };
 
@@ -228,6 +229,9 @@ Cvar_Get(char *var_name, char *var_value, int flags)
 	if (var)
 	{
 		var->flags |= flags;
+
+		if (var->default_string)
+			Z_Free(var->default_string);
 
 		if (!var_value)
 		{
@@ -874,6 +878,7 @@ Cvar_Fini(void)
 		cvar_t *c = var->next;
 		Z_Free(var->string);
 		Z_Free(var->name);
+		Z_Free(var->default_string);
 		Z_Free(var);
         var = c;
 	}

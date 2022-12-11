@@ -54,25 +54,54 @@ typedef unsigned char byte;
 #endif
 
 // stuff to align variables/arrays and for noreturn
-#if __STDC_VERSION__ >= 201112L // C11 or newer
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L // C11 or newer
 	#define YQ2_ALIGNAS_SIZE(SIZE)  _Alignas(SIZE)
 	#define YQ2_ALIGNAS_TYPE(TYPE)  _Alignas(TYPE)
 	// must be used as prefix (YQ2_ATTR_NORETURN void bla();)!
 	#define YQ2_ATTR_NORETURN       _Noreturn
+  #if defined(__GNUC__)
+	#define YQ2_ATTR_MALLOC         __attribute__ ((__malloc__))
+	#define YQ2_ATTR_INLINE         __attribute__((always_inline)) inline
+  #elif defined(_MSC_VER)
+	#define YQ2_ATTR_MALLOC         __declspec(restrict)
+	#define YQ2_ATTR_INLINE         __forceinline
+  #else
+	// no equivalent per see
+	#define YQ2_ATTR_MALLOC
+	#define YQ2_ATTR_INLINE         inline
+  #endif
 #elif defined(__GNUC__) // GCC and clang should support this attribute
 	#define YQ2_ALIGNAS_SIZE(SIZE)  __attribute__(( __aligned__(SIZE) ))
 	#define YQ2_ALIGNAS_TYPE(TYPE)  __attribute__(( __aligned__(__alignof__(TYPE)) ))
 	// must be used as prefix (YQ2_ATTR_NORETURN void bla();)!
 	#define YQ2_ATTR_NORETURN       __attribute__ ((noreturn))
+	#define YQ2_ATTR_MALLOC         __attribute__ ((__malloc__))
+	#define YQ2_ATTR_INLINE         __attribute__((always_inline)) inline
 #elif defined(_MSC_VER)
-	#define YQ2_ALIGNAS_SIZE(SIZE)  __declspec( align(SIZE) )
-	#define YQ2_ALIGNAS_TYPE(TYPE)  __declspec( align( __alignof(TYPE) ) )
+	// Note: We prefer VS2019 16.8 or newer in C11 mode (/std:c11),
+	//       then the __STDC_VERSION__ >= 201112L case above is used
+
+	#define YQ2_ALIGNAS_SIZE(SIZE)  __declspec(align(SIZE))
+	// FIXME: for some reason, the following line doesn't work
+	//#define YQ2_ALIGNAS_TYPE( TYPE )  __declspec(align(__alignof(TYPE)))
+
+  #ifdef _WIN64 // (hopefully) good enough workaround
+	#define YQ2_ALIGNAS_TYPE(TYPE)  __declspec(align(8))
+  #else // 32bit
+	#define YQ2_ALIGNAS_TYPE(TYPE)  __declspec(align(4))
+  #endif // _WIN64
+
 	// must be used as prefix (YQ2_ATTR_NORETURN void bla();)!
 	#define YQ2_ATTR_NORETURN       __declspec(noreturn)
+	#define YQ2_ATTR_MALLOC         __declspec(restrict)
+	#define YQ2_ATTR_INLINE         __forceinline
 #else
 	#warning "Please add a case for your compiler here to align correctly"
+	#define YQ2_ALIGNAS_SIZE(SIZE)
 	#define YQ2_ALIGNAS_TYPE(TYPE)
 	#define YQ2_ATTR_NORETURN
+	#define YQ2_ATTR_MALLOC
+	#define YQ2_ATTR_INLINE         inline
 #endif
 
 #if defined(__GNUC__)
@@ -131,6 +160,12 @@ typedef unsigned char byte;
  // by default our .so/.dylibs don't export any functions, use this to
  // make a function visible (for GetGameAPI(), GetRefAPI() and similar)
  #define Q2_DLL_EXPORTED  __attribute__((__visibility__("default")))
+#endif
+
+#ifdef _MSC_VER
+ #define PRINTF_ATTR(FMT, VARGS)
+#else // at least GCC/mingw and clang support this
+ #define PRINTF_ATTR(FMT, VARGS) __attribute__((format(printf, FMT , VARGS )))
 #endif
 
 /* per-level limits */
@@ -310,7 +345,7 @@ float BigFloat(float l);
 float LittleFloat(float l);
 
 void Swap_Init(void);
-char *va(char *format, ...)  __attribute__ ((format (printf, 1, 2)));
+char *va(const char *format, ...)  PRINTF_ATTR(1, 2);
 
 /* ============================================= */
 
@@ -348,8 +383,8 @@ qboolean Sys_IsDir(const char *path);
 qboolean Sys_IsFile(const char *path);
 
 /* large block stack allocation routines */
-void *Hunk_Begin(int maxsize);
-void *Hunk_Alloc(int size);
+YQ2_ATTR_MALLOC void *Hunk_Begin(int maxsize);
+YQ2_ATTR_MALLOC void *Hunk_Alloc(int size);
 void Hunk_Free(void *buf);
 int Hunk_End(void);
 

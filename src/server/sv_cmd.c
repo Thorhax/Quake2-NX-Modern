@@ -156,7 +156,7 @@ SV_DemoMap_f(void)
 		return;
 	}
 
-	SV_Map(true, Cmd_Argv(1), false);
+	SV_Map(true, Cmd_Argv(1), false, false);
 }
 
 /*
@@ -261,7 +261,7 @@ SV_GameMap_f(void)
 
 
 	/* start up the next map */
-	SV_Map(false, map, false);
+	SV_Map(false, map, false, false);
 
 	/* archive server state */
 	Q_strlcpy(svs.mapcmd, map, sizeof(svs.mapcmd));
@@ -679,8 +679,82 @@ SV_ServerCommand_f(void)
 }
 
 void
+SV_Gamemode_f(void)
+{
+	int none;
+	char *arg;
+
+	if (Cmd_Argc() != 2)
+	{
+		Com_Printf("gamemode dm, coop or sp\ngamemode ? to print current info\n");
+		return;
+	}
+
+	arg = Cmd_Argv(1);
+
+	if (*arg == '?')
+	{
+		none = 1;
+
+		if (Cvar_VariableValue("deathmatch"))
+		{
+			Com_Printf("dm ");
+			none = 0;
+		}
+
+		if (Cvar_VariableValue("coop"))
+		{
+			Com_Printf("coop ");
+			none = 0;
+		}
+
+		if (Cvar_VariableValue("singleplayer"))
+		{
+			Com_Printf("sp ");
+			none = 0;
+		}
+
+		if (none)
+		{
+			Com_Printf("none\n");
+		}
+		else
+		{
+			Com_Printf("\n");
+		}
+
+		return;
+	}
+
+	if (strcmp(arg, "dm") == 0)
+	{
+		Cvar_Set("deathmatch", "1");
+		Cvar_Set("coop", "0");
+		Cvar_Set("singleplayer", "0");
+	}
+	else if (strcmp(arg, "coop") == 0)
+	{
+		Cvar_Set("deathmatch", "0");
+		Cvar_Set("coop", "1");
+		Cvar_Set("singleplayer", "0");
+	}
+	else if (strcmp(arg, "sp") == 0)
+	{
+		Cvar_Set("deathmatch", "0");
+		Cvar_Set("coop", "0");
+		Cvar_Set("singleplayer", "1");
+	}
+	else
+	{
+		Com_Printf("unknown gamemode: '%s'\nspecify dm, coop or sp\n", arg);
+	}
+}
+
+void
 SV_InitOperatorCommands(void)
 {
+	Cmd_AddCommand("gamemode", SV_Gamemode_f);
+
 	Cmd_AddCommand("heartbeat", SV_Heartbeat_f);
 	Cmd_AddCommand("kick", SV_Kick_f);
 	Cmd_AddCommand("status", SV_Status_f);

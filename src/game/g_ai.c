@@ -28,10 +28,10 @@
 
 extern cvar_t *maxclients;
 
-qboolean enemy_vis;
-qboolean enemy_infront;
-int enemy_range;
-float enemy_yaw;
+static qboolean enemy_vis;
+static qboolean enemy_infront;
+static int enemy_range;
+static float enemy_yaw;
 
 qboolean FindTarget(edict_t *self);
 qboolean ai_checkattack(edict_t *self);
@@ -1196,8 +1196,15 @@ ai_run(edict_t *self, float dist)
 		return;
 	}
 
+	tempgoal = G_SpawnOptional();
+
+	if (!tempgoal)
+	{
+		M_MoveToGoal(self, dist);
+		return;
+	}
+
 	save = self->goalentity;
-	tempgoal = G_Spawn();
 	self->goalentity = tempgoal;
 
 	new = false;

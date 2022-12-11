@@ -64,13 +64,14 @@ CL_DrawInventory(void)
 {
 	int i, j;
 	int num, selected_num, item;
-	int index[MAX_ITEMS];
 	char string[1024];
 	int x, y;
 	char binding[1024];
 	const char *bind;
 	int selected;
 	int top;
+
+	int index[MAX_ITEMS] = {0};
 
 	selected = cl.frame.playerstate.stats[STAT_SELECTED_ITEM];
 
@@ -139,7 +140,7 @@ CL_DrawInventory(void)
 			}
 		}
 
-		Com_sprintf(string, sizeof(string), "%6s %3i %s", bind,
+		Com_sprintf(string, sizeof(string), "%6.6s %3i %s", bind,
 				cl.inventory[item], cl.configstrings[CS_ITEMS + item]);
 
 		if (item != selected)

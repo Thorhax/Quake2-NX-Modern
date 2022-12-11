@@ -30,7 +30,7 @@ game. Without the patch the game will not work correctly!
 1. Download the patch from our mirror or somewhere else. The MD5
    checksum is `490557d4a90ff346a175d865a2bade87`:
    https://deponie.yamagi.org/quake2/idstuff/q2-3.20-x86-full-ctf.exe
-2. Extract the patch into an empty directory. The patch comes as an
+2. Extract the patch into an empty directory. The patch comes as a
    self-extracting ZIP file. On Windows it can be extracted by double
    clicking on it, on other systems an archiver or the *unzip* command
    can be used.
@@ -102,9 +102,9 @@ may be supported in the future.
    so on. On both the Quake II and the Addon CDs track 01 is the data
    track and thus can't be ripped.
 4. Put these files into the corresponding subdirectory:
-	* baseq2/music for Quake II.
-	* xatrix/music for The Reckoning.
-	* rogue/music for Ground Zero.
+	* *baseq2/music* for Quake II.
+	* *xatrix/music* for The Reckoning.
+	* *rogue/music* for Ground Zero.
 
 
 #### Using a Shell Script
@@ -126,6 +126,9 @@ The Quake II distributed by GOG.com contains the soundtrack, it just
 needs to be copied into the game data directory. The target directory is
 just *music/*, next to *baseq2/*. **Not** inside *baseq2/*.
 
+Unixoid systems are case sensitive. On them the files should be named
+*TrackXX.ogg* with a capital T. Otherwise the game won't find them.
+
 
 ### Alternate Startup Configuration
 
@@ -141,27 +144,35 @@ As an optional feature, Yamagi Quake II provides fixed map data files
 to fix some map bugs that have been discovered by players over the
 years.
 
-These fixes include fixes for bad  monster counts in some
-maps/difficulty settings, fixing broken spawn chains that made it
-impossible to spawn some monsters, removing DM-only items that spawn
-in unreachable areas in SP/co-op, and so on. You can find detailed
-changelogs for each map by opening the .ent files with a text editor
-and reading the comment section at the top (lines starting with "//").
+These fixes include fixes for bad monster counts in some maps /
+difficulty settings, fixing broken spawn chains that made it impossible
+to spawn some monsters, removing DM-only items that spawn in unreachable
+areas in single player /co-op, and so on. You can find detailed
+changelogs for each map by opening the .ent files with a text editor and
+reading the comment section at the top (lines starting with "//").
+
+
+### Monster Footstep Sounds
+
+Yamagi Quake II has optional support for monster footstep sounds. These
+require some custom audio files. Download the pak file with the sounds
+from https://deponie.yamagi.org/quake2/assets/footsteps.pkz and copy
+the file into the *baseq2/* directory.
+
+The footstep sounds are included with the official Windows release.
 
 
 #### Download And Setup
 
 1. Download the .ent files from the yquake2 repositories on GitHub.
-
-   *baseq2*: yquake2/yquake2/stuff/mapfixes/baseq2/
-   *juggernaut*: yquake2/yquake2/stuff/mapfixes/juggernaut/
-   *xatrix*: yquake2/xatrix/stuff/mapfixes/
-   *rogue*: yquake2/rogue/stuff/mapfixes/
-   *zaero*: yquake2/zaero/stuff/mapfixes/
-
+   * **baseq2**: yquake2/yquake2/stuff/mapfixes/baseq2/
+   * **juggernaut**: yquake2/yquake2/stuff/mapfixes/juggernaut/
+   * **xatrix**: yquake2/xatrix/stuff/mapfixes/
+   * **rogue**: yquake2/rogue/stuff/mapfixes/
+   * **zaero**: yquake2/zaero/stuff/mapfixes/
 2. Once you have the .ent files you want, put them in the respective
-   */maps* sub-folder. So *xatrix* .ent files should go into your local
-   */xatrix/maps* folder (create this folder if it does not exist).
+   *maps/* sub-folder. So *xatrix* .ent files should go into your local
+   *xatrix/maps/* folder (create this folder if it does not exist).
 3. You will see a notification message in the console if an .ent file
    was loaded. If you see this message, you know the map fixes are in
    effect.
@@ -185,8 +196,8 @@ no soundtrack.
 1. Download the demo from our mirror or somewhere else. Its MD5
    checksum is `4d1cd4618e80a38db59304132ea0856c`:
    https://deponie.yamagi.org/quake2/idstuff/q2-314-demo-x86.exe
-2. Extract the downloaded file. It's an ordinary, self-extract ZIP
-   archive. On Windows it can be extracted by double clicking on it, on
+2. Extract the downloaded file. It's a self-extract ZIP archive.
+   On Windows it can be extracted by double clicking on it, on
    other system an archiver or the *unzip* command can be used.
 3. Create a new directory and a subdirectory *baseq2/* in it.
 4. Copy the *pak0.pak* and the *players/* subdirectory from the
@@ -210,6 +221,11 @@ platform:
   packages. Theses packages may be outdated, see below for compiling
   the executables.
 
+**Please note:** The addons needs their own game library. The libraries
+are included with the official Windows release. Linux distributions
+often package them in a distinced package. If you want to compile from
+source, have a look at the README files supplied with the addons.
+
 
 ### Windows
 
@@ -226,7 +242,7 @@ There're two executables:
 
 * *yquake2.exe*: This is main executable and should be preferred.
 * *quake.exe*: This is just a wrapper to stay compatible with existing
-  setups. For technical reasons *quake.exe* may not start in foreground
+  setups. For technical reasons *quake.exe* may not start in foreground,
   but in background!
 
 If Windows Defender is activated, that's the default on Windows 8 and
@@ -256,32 +272,24 @@ the [Packaging Guide](05_packaging.md).
 To compile Yamagi Quake II from source the following dependencies
 (including development headers) are needed:
 
-* A GCC compatible compiler like *gcc*, *clang* or *mingw*.
+* *MinGW-w64* or *Visual Studio (2015 or newer)* for Windows or a
+  GCC compatible compiler like *gcc* or *clang* for other platforms.
 * A LibGL implementation with system headers.
 * An OpenAL implementation, *openal-soft* is highly recommended.
 * libcurl.
 * SDL 2.0.
-* Vulkan Headers version 1.2 or higher.
-
-While Yamagi Quake II ships with an CMakeFile.txt using the GNU Makefile
-for release builds is recommended. The GNU Makefile offers more options
-and is well tested.
 
 
-### Prerequisites on Windows
+### Prerequisites on Windows when using MinGW
 
-On Windows a MinGW environment is needed. A preconfigured environment
-with all necessary dependencies and compatibles compilers can be found
-at: https://deponie.yamagi.org/quake2/windows/buildenv/
+To compile Yamagi Quake II under Windows, using a MinGW environment is
+recommended. A preconfigured environment based upon MSYS2 with all necessary
+dependencies and compatibles compilers can be found at:
+https://deponie.yamagi.org/quake2/windows/buildenv/
 
-The environment must be extracted into *C:\MSYS2*. Other directores
-will likely work, but are unsupported. So don't complain if you
-experience problems. Either the 32 bit version can be started through
-*C:\MSYS2\msys32.exe* or the 64 bit version through
+The environment can be extracted anywhere. Either the 32 bit version can
+be started through *C:\MSYS2\msys32.exe* or the 64 bit version through
 *C:\MSYS2\msys64.exe*.
-
-At this time Yamagi Quake II can't be compiled with Microsoft Visual
-Studio.
 
 
 ### Prerequisites on Unixoid Platforms
@@ -289,28 +297,63 @@ Studio.
 The build dependencies can be installed with:
 
 * On Arch Linux based distributions: `pacman -S base-devel mesa openal
-  curl sdl2 vulkan-headers`
+  curl sdl2`
 * On Debian based distributions: `apt install build-essential
-  libgl1-mesa-dev libsdl2-dev libopenal-dev libcurl4-openssl-dev
-  libvulkan-dev`
-* On FreeBSD: `pkg install gmake libGL sdl2 openal-soft curl
-  vulkan-headers`
+  libgl1-mesa-dev libsdl2-dev libopenal-dev libcurl4-openssl-dev`
+* On FreeBSD: `pkg install gmake libGL sdl2 openal-soft curl`
+* On NetBSD: `pkgin install gmake SDL2 openal-soft curl`
+* On OpenBSD: `pkg_add gmake sdl2 openal curl`
+* On Solaris/Illumos: `pkg install sdl2 openal curl`
+* On Haiku: `pkgman libsdl2_devel openal_devel curl_devel`
 * On MacOS the dependencies can be installed with Homebrew (from
-  https://brew.sh): `brew install sdl2 openal-soft vulkan-headers`
+  https://brew.sh): `brew install sdl2 openal-soft`
 
 Other distributions or platforms often have package named similar to the
 Debian or FreeBSD packages.
 
 
-### Compiling
+### Compiling with GCC, Clang or MinGW
 
 Download the latest release from https://www.yamagi.org/quake2 or clone
 the source from https://github.com/yquake2/yquake2.git, change into the
-*yquake2/* source directory and type *make* (Linux, MacOS and Windows)
-or *gmake* (FreeBSD). After the build finished, copy everything from the
-*release/* directory to the Yamagi Quake II installation directory.
+*yquake2/* source directory and type *make* (Linux, MacOS, Haiku and Windows)
+or *gmake* (FreeBSD, NetBSD, OpenBSD). Note on Solaris systems, *make*
+ or *gmake* can be used, the latter provides in addition parallel build.
+After the build finished, copy everything from the *release/* directory
+to the Yamagi Quake II installation directory.
 
 For the addons download or clone their source, change into the source
 directory and type *make* (Linux, MacOS and Windows) or *gmake*
-(FreeBSD). After the compilation finishes the *release/game.so* is
-copied to the corresponding directory in the Quake II installation.
+(FreeBSD, NetBSD, OpenBSD). After the compilation finishes the *release/game.so*
+is copied to the corresponding directory in the Quake II installation.
+
+
+### Compiling on Windows with Visual Studio (2015 and newer)
+
+To compile with Visual Studio, CMake is required.  
+We only support VS2015 and newer, though VS2019 version 16.8 or newer is recommended.
+
+Furthermore you'll need **SDL2**, **openal-soft** and **libcurl** to link against.  
+The easiest way to get those dependencies is using the
+[dhewm3-libs](https://github.com/dhewm/dhewm3-libs/) together with the
+`YQUAKE2LIBS` CMake variable.  
+It might also be possible to manually install the dependencies or to use
+[vcpkg](https://vcpkg.io) or similar to install them, but that's untested.
+
+Create a build directory outside the yquake2 directory, open a terminal,
+change to that directory and use CMake to generate a Visual Studio solution.
+
+For Win32 (32bit x86) and VS2019 the commandline should look like:  
+`cmake -G "Visual Studio 16 2019" -A Win32 -DYQUAKE2LIBS="C:/dev/dhewm3-libs/i686-w64-mingw32" path/to/yquake2`  
+Of course you need to adjust `C:/dev/dhewm3-libs/` to the directory you
+put the *dhewm3-libs* in, and `path/to/yquake2` to your Yamagi Quake II
+source checkout (the directory the `CMakeLists.txt` is in).
+
+For x64/Win64 (64bit x86) it should look like:  
+`cmake -G "Visual Studio 16 2019" -A x64 -DYQUAKE2LIBS="C:/dev/dhewm3-libs/x86_64-w64-mingw32" path/to/yquake2`
+
+After successfully running this command, there should be a `yquake2.sln`
+in your build directory, you can open it with Visual Studio to compile.
+
+If you prefer using `cmake-gui`, you can specify the `YQUAKE2LIBS` with the
+`Add Entry` option (Name: `YQUAKE2LIBS`, Type: `PATH`, Value: *see examples above*).

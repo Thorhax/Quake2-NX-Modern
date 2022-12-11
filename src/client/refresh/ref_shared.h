@@ -29,6 +29,23 @@
 
 #include "../vid/header/ref.h"
 
+#ifdef _MSC_VER
+
+  #include <malloc.h>
+
+  #define YQ2_VLA(TYPE, VARNAME, NUMELEMS) \
+	TYPE * VARNAME = (TYPE *) _malloca(sizeof(TYPE) * NUMELEMS)
+  #define YQ2_VLAFREE(VARNAME) \
+	_freea(VARNAME); VARNAME=NULL;
+
+#else // other compilers hopefully support C99 VLAs (gcc/mingw and clang do)
+
+  #define YQ2_VLA(TYPE, VARNAME, NUMELEMS) \
+	TYPE VARNAME[NUMELEMS]
+  #define YQ2_VLAFREE(VARNAME)
+
+#endif
+
 /*
  * skins will be outline flood filled and mip mapped
  * pics and sprites with alpha will be outline flood filled
@@ -58,21 +75,32 @@ typedef enum
 
 #define MAX_LBM_HEIGHT 480
 
-extern void R_Printf(int level, const char* msg, ...) __attribute__ ((format (printf, 2, 3)));
+extern void R_Printf(int level, const char* msg, ...) PRINTF_ATTR(2, 3);
 
 extern void LoadPCX(char *origname, byte **pic, byte **palette, int *width, int *height);
 extern void GetPCXInfo(char *filename, int *width, int *height);
 
 extern qboolean LoadSTB(const char *origname, const char* type, byte **pic, int *width, int *height);
-extern qboolean ResizeSTB(byte *input_pixels, int input_width, int input_height,
+extern qboolean ResizeSTB(const byte *input_pixels, int input_width, int input_height,
 			  byte *output_pixels, int output_width, int output_height);
 extern void SmoothColorImage(unsigned *dst, size_t size, size_t rstep);
-extern void scale2x(byte *src, byte *dst, int width, int height);
-extern void scale3x(byte *src, byte *dst, int width, int height);
+extern void scale2x(const byte *src, byte *dst, int width, int height);
+extern void scale3x(const byte *src, byte *dst, int width, int height);
 
 extern void GetWalInfo(char *name, int *width, int *height);
 extern void GetM8Info(char *name, int *width, int *height);
 
 extern float Mod_RadiusFromBounds(const vec3_t mins, const vec3_t maxs);
-extern byte* Mod_DecompressVis(byte *in, int row);
+extern const byte* Mod_DecompressVis(const byte *in, int row);
+
+/* Shared models load */
+typedef struct image_s* (*findimage_t)(char *name, imagetype_t type);
+void *Mod_LoadMD2 (const char *mod_name, const void *buffer, int modfilelen,
+	vec3_t mins, vec3_t maxs, struct image_s **skins,
+	findimage_t find_image, modtype_t *type);
+extern void *Mod_LoadSP2 (const char *mod_name, const void *buffer, int modfilelen,
+	struct image_s **skins, findimage_t find_image, modtype_t *type);
+extern int Mod_ReLoadSkins(struct image_s **skins, findimage_t find_image,
+	void *extradata, modtype_t type);
+
 #endif /* SRC_CLIENT_REFRESH_REF_SHARED_H_ */

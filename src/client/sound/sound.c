@@ -72,10 +72,13 @@ cvar_t *s_ambient;
 cvar_t* s_underwater;
 cvar_t* s_underwater_gain_hf;
 cvar_t* s_doppler;
+cvar_t* s_occlusion_strength;
+cvar_t* s_reverb_preset;
 cvar_t* s_ps_sorting;
 
 channel_t channels[MAX_CHANNELS];
 static int num_sfx;
+static int sound_max;
 int paintedtime;
 int s_numchannels;
 int s_rawend;
@@ -162,7 +165,7 @@ static qboolean
 S_IsSilencedMuzzleFlash(const wavinfo_t* info, const void* raw_data, const char* name)
 {
 	/* Skip the prefix. */
-	static const size_t base_sound_string_length = strlen("sound/");
+	static const size_t base_sound_string_length = 6; //strlen("sound/");
 	const char* base_name = name + base_sound_string_length;
 
 	/* Match to well-known muzzle flash sound names. */
@@ -205,6 +208,235 @@ S_IsSilencedMuzzleFlash(const wavinfo_t* info, const void* raw_data, const char*
 	return true;
 }
 
+static void
+S_LoadVorbis(const char *path, const char* name, wavinfo_t *info, void **buffer)
+{
+	int	len;
+	char namewe[256];
+	char filename[MAX_QPATH];
+	const char* ext;
+
+	if (!path)
+	{
+		return;
+	}
+
+	ext = COM_FileExtension(path);
+	if(!ext[0])
+	{
+		/* file has no extension */
+		return;
+	}
+
+	len = strlen(path);
+
+	if (len < 5)
+	{
+		return;
+	}
+
+	/* Remove the extension */
+	memset(namewe, 0, sizeof(namewe));
+	memcpy(namewe, path, len - (strlen(ext) + 1));
+
+	/* Combine with ogg */
+	Q_strlcpy(filename, namewe, sizeof(filename));
+
+	/* Add the extension */
+	Q_strlcat(filename, ".ogg", sizeof(filename));
+
+	OGG_LoadAsWav(filename, info, buffer);
+}
+
+static void
+S_GetVolume(const byte *data, int sound_length, int width, double *sound_volume)
+{
+	/* update sound volume */
+	*sound_volume = 0;
+	if (width == 2)
+	{
+		short *sound_data = (short *)data;
+		short *sound_end = sound_data + sound_length;
+		while (sound_data < sound_end)
+		{
+			short sound_sample = LittleShort(*sound_data);
+			*sound_volume += (sound_sample * sound_sample);
+			sound_data ++;
+		}
+	}
+	else if (width == 1)
+	{
+		byte *sound_data = (byte *)data;
+		byte *sound_end = sound_data + sound_length;
+		while (sound_data < sound_end)
+		{
+			// normilize to 16bit sound;
+			short sound_sample = *sound_data << 8;
+			*sound_volume += (sound_sample * sound_sample);
+			sound_data ++;
+		}
+	}
+	if (sound_length != 0)
+	{
+		*sound_volume /= sound_length;
+		*sound_volume = sqrtf(*sound_volume);
+	}
+}
+
+static void
+S_GetStatistics(const byte *data, int sound_length, int width, int channels,
+	double sound_volume, int *begin_length, int *end_length,
+	int *attack_length, int *fade_length)
+{
+	/* attack length */
+	short sound_max = 0;
+	/* calculate max value*/
+	if (width == 2)
+	{
+		short *sound_data = (short *)data;
+		short *sound_end = sound_data + sound_length;
+		while (sound_data < sound_end)
+		{
+			short sound_sample = LittleShort(*sound_data);
+			if (sound_max < abs(sound_sample))
+			{
+				sound_max = abs(sound_sample);
+			}
+			sound_data ++;
+		}
+	}
+	else if (width == 1)
+	{
+		byte *sound_data = (byte *)data;
+		byte *sound_end = sound_data + sound_length;
+		while (sound_data < sound_end)
+		{
+			// normilize to 16bit sound;
+			short sound_sample = *sound_data << 8;
+			if (sound_max < abs(sound_sample))
+			{
+				sound_max = abs(sound_sample);
+			}
+			sound_data ++;
+		}
+	}
+
+	// use something in middle
+	sound_max = (sound_max + sound_volume) / 2;
+
+	// calculate attack/fade length
+	if (width == 2)
+	{
+		// calculate attack/fade length
+		short *sound_data = (short *)data;
+		short *delay_data = sound_data;
+		short *fade_data = sound_data;
+		short *sound_end = sound_data + sound_length;
+		short sound_sample = 0;
+		short sound_treshold = sound_max / 2;
+
+		/* delay calculate */
+		do
+		{
+			sound_sample = LittleShort(*sound_data);
+			sound_data ++;
+		}
+		while (sound_data < sound_end && abs(sound_sample) < sound_treshold);
+		/* delay_data == (short *)(data + info.dataofs) */
+		*begin_length = (sound_data - delay_data) / channels;
+		delay_data = sound_data;
+		fade_data = sound_data;
+
+		/* attack calculate */
+		do
+		{
+			sound_sample = LittleShort(*sound_data);
+			sound_data ++;
+		}
+		while (sound_data < sound_end && abs(sound_sample) < sound_max);
+		/* fade_data == delay_data */
+		*attack_length = (sound_data - delay_data) / channels;
+		fade_data = sound_data;
+
+		/* end calculate */
+		sound_data = sound_end;
+		do
+		{
+			sound_data --;
+			sound_sample = LittleShort(*sound_data);
+		}
+		while (sound_data > fade_data && abs(sound_sample) < sound_treshold);
+		*end_length = (sound_end -  sound_data) / channels;
+		sound_end = sound_data;
+
+		/* fade calculate */
+		do
+		{
+			sound_data --;
+			sound_sample = LittleShort(*sound_data);
+		}
+		while (sound_data > fade_data && abs(sound_sample) < sound_max);
+		*fade_length = (sound_end - sound_data) / channels;
+	}
+	else if (width == 1)
+	{
+		// calculate attack/fade length
+		byte *sound_data = (byte *)data;
+		byte *delay_data = sound_data;
+		byte *fade_data = sound_data;
+		byte *sound_end = sound_data + sound_length;
+		short sound_sample = 0;
+		short sound_treshold = sound_max / 2;
+
+		/* delay calculate */
+		do
+		{
+			// normilize to 16bit sound;
+			sound_sample = *sound_data << 8;
+			sound_data ++;
+		}
+		while (sound_data < sound_end && abs(sound_sample) < sound_treshold);
+		/* delay_data == (short *)(data + info.dataofs) */
+		*begin_length = (sound_data - delay_data) / channels;
+		delay_data = sound_data;
+		fade_data = sound_data;
+
+		/* attack calculate */
+		do
+		{
+			// normilize to 16bit sound;
+			sound_sample = *sound_data << 8;
+			sound_data ++;
+		}
+		while (sound_data < sound_end && abs(sound_sample) < sound_max);
+		/* fade_data == delay_data */
+		*attack_length = (sound_data - delay_data) / channels;
+		fade_data = sound_data;
+
+		/* end calculate */
+		sound_data = sound_end;
+		do
+		{
+			sound_data --;
+			// normilize to 16bit sound;
+			sound_sample = *sound_data << 8;
+		}
+		while (sound_data > fade_data && abs(sound_sample) < sound_treshold);
+		*end_length = (sound_end -  sound_data) / channels;
+		sound_end = sound_data;
+
+		/* fade calculate */
+		do
+		{
+			sound_data --;
+			// normilize to 16bit sound;
+			sound_sample = *sound_data << 8;
+		}
+		while (sound_data > fade_data && abs(sound_sample) < sound_max);
+		*fade_length = (sound_end - sound_data) / channels;
+	}
+}
+
 /*
  * Loads one sample into memory
  */
@@ -212,10 +444,14 @@ sfxcache_t *
 S_LoadSound(sfx_t *s)
 {
 	char namebuffer[MAX_QPATH];
-	byte *data;
+	byte *data = NULL;
 	wavinfo_t info;
 	sfxcache_t *sc;
-	int size;
+	double sound_volume = 0;
+	int begin_length = 0;
+	int attack_length = 0;
+	int fade_length = 0;
+	int end_length = 0;
 	char *name;
 
 	if (s->name[0] == '*')
@@ -251,7 +487,18 @@ S_LoadSound(sfx_t *s)
 		Com_sprintf(namebuffer, sizeof(namebuffer), "sound/%s", name);
 	}
 
-	size = FS_LoadFile(namebuffer, (void **)&data);
+	S_LoadVorbis(namebuffer, s->name, &info, (void **)&data);
+
+	// can't load ogg file
+	if (!data)
+	{
+		int size = FS_LoadFile(namebuffer, (void **)&data);
+
+		if (data)
+		{
+			info = GetWavinfo(s->name, data, size);
+		}
+	}
 
 	if (!data)
 	{
@@ -260,7 +507,10 @@ S_LoadSound(sfx_t *s)
 		return NULL;
 	}
 
-	info = GetWavinfo(s->name, data, size);
+	/*
+	Com_Printf("%s: rate:%d\n\twidth:%d\n\tchannels:%d\n\tloopstart:%d\n\tsamples:%d\n\tdataofs:%d\n",
+		s->name, info.rate, info.width, info.channels, info.loopstart, info.samples, info.dataofs);
+	*/
 
 	if (info.channels < 1 || info.channels > 2)
 	{
@@ -274,17 +524,28 @@ S_LoadSound(sfx_t *s)
 		s->is_silenced_muzzle_flash = true;
 	}
 
+	S_GetVolume(data + info.dataofs, info.samples * info.channels,
+		info.width, &sound_volume);
+
+	S_GetStatistics(data + info.dataofs, info.samples * info.channels,
+		info.width, info.channels, sound_volume, &begin_length, &end_length,
+		&attack_length, &fade_length);
+
 #if USE_OPENAL
 	if (sound_started == SS_OAL)
 	{
-		sc = AL_UploadSfx(s, &info, data + info.dataofs);
+		sc = AL_UploadSfx(s, &info, data + info.dataofs, sound_volume,
+						  begin_length, end_length,
+						  attack_length, fade_length);
 	}
 	else
 #endif
 	{
 		if (sound_started == SS_SDL)
 		{
-			if (!SDL_Cache(s, &info, data + info.dataofs))
+			if (!SDL_Cache(s, &info, data + info.dataofs, sound_volume,
+						  begin_length, end_length,
+						  attack_length, fade_length))
 			{
 				Com_Printf("Pansen!\n");
 				FS_FreeFile(data);
@@ -508,6 +769,37 @@ S_RegisterSexedSound(entity_state_t *ent, char *base)
 	return sfx;
 }
 
+static qboolean
+S_HasFreeSpace(void)
+{
+	sfx_t *sfx;
+	int i, used;
+
+	used = 0;
+
+	/* check used slots */
+	for (i = 0, sfx = known_sfx; i < num_sfx; i++, sfx++)
+	{
+		if (!sfx->name[0])
+		{
+			continue;
+		}
+
+		if (sfx->registration_sequence == s_registration_sequence)
+		{
+			used ++;
+		}
+	}
+
+	if (sound_max < used)
+	{
+		sound_max = used;
+	}
+
+	// should same size of free slots as currently used
+	return (num_sfx + used) < MAX_SFX;
+}
+
 /*
  * Called after registering of
  * sound has ended
@@ -518,29 +810,32 @@ S_EndRegistration(void)
 	int i;
 	sfx_t *sfx;
 
-	/* free any sounds not from this registration sequence */
-	for (i = 0, sfx = known_sfx; i < num_sfx; i++, sfx++)
+	if (!S_HasFreeSpace())
 	{
-		if (!sfx->name[0])
+		/* free any sounds not from this registration sequence */
+		for (i = 0, sfx = known_sfx; i < num_sfx; i++, sfx++)
 		{
-			continue;
-		}
-
-		if (sfx->registration_sequence != s_registration_sequence)
-		{
-			/* it is possible to have a leftover */
-			if (sfx->cache)
+			if (!sfx->name[0])
 			{
-				Z_Free(sfx->cache); /* from a server that didn't finish loading */
+				continue;
 			}
 
-			if (sfx->truename)
+			if (sfx->registration_sequence != s_registration_sequence)
 			{
-				Z_Free(sfx->truename);
-			}
+				/* it is possible to have a leftover */
+				if (sfx->cache)
+				{
+					Z_Free(sfx->cache); /* from a server that didn't finish loading */
+				}
 
-			sfx->cache = NULL;
-			sfx->name[0] = 0;
+				if (sfx->truename)
+				{
+					Z_Free(sfx->truename);
+				}
+
+				sfx->cache = NULL;
+				sfx->name[0] = 0;
+			}
 		}
 	}
 
@@ -814,33 +1109,40 @@ S_StartSound(vec3_t origin, int entnum, int entchannel, sfx_t *sfx,
 
 	if (sfx->name[0])
 	{
-		vec3_t orientation, direction;
-		vec_t distance_direction;
-		int dir_x, dir_y, dir_z;
+		vec3_t direction = {0};
+		unsigned int effect_duration = 0;
+		unsigned short int effect_volume = 0;
 
-		VectorSubtract(listener_forward, listener_up, orientation);
-
-		// with !fixed we have all sounds related directly to player,
+		// with !ps->fixed we have all sounds related directly to player,
 		// e.g. players fire, pain, menu
-		if (!ps->fixed_origin)
-		{
-			VectorCopy(orientation, direction);
-			distance_direction = 0;
-		}
-		else
+		// else, they come from the environment
+		if (ps->fixed_origin)
 		{
 			VectorSubtract(listener_origin, ps->origin, direction);
-			distance_direction = VectorLength(direction);
 		}
 
-		VectorNormalize(direction);
-		VectorNormalize(orientation);
+		if (sfx->cache)
+		{
+			effect_duration = sfx->cache->length;
 
-		dir_x = 16 * orientation[0] * direction[0];
-		dir_y = 16 * orientation[1] * direction[1];
-		dir_z = 16 * orientation[2] * direction[2];
+			if (sfx->cache->stereo)
+			{
+				effect_duration /= 2;
+			}
 
-		Haptic_Feedback(sfx->name, 16 - distance_direction / 32, dir_x, dir_y, dir_z);
+			// The following may be ugly: cache length in SDL is much, much bigger
+			// than the one in OpenAL, so much that it's definitely not in ms.
+			// If that changes in the future, this must be removed.
+			if (sound_started == SS_SDL)
+			{
+				effect_duration /= 45;
+			}
+
+			effect_volume = sfx->cache->volume;
+		}
+
+		Controller_Rumble(sfx->name, direction, !ps->fixed_origin,
+			effect_duration, effect_volume);
 	}
 
 	ps->entnum = entnum;
@@ -1123,10 +1425,12 @@ S_SoundList(void)
 	int i;
 	sfx_t *sfx;
 	sfxcache_t *sc;
-	int size, total;
+	int size, total, used;
 	int numsounds;
+	qboolean freeup;
 
 	total = 0;
+	used = 0;
 	numsounds = 0;
 
 	for (sfx = known_sfx, i = 0; i < num_sfx; i++, sfx++)
@@ -1136,16 +1440,27 @@ S_SoundList(void)
 			continue;
 		}
 
+		if (sfx->registration_sequence == s_registration_sequence)
+		{
+			used++;
+		}
+
 		sc = sfx->cache;
 
 		if (sc)
 		{
 			size = sc->length * sc->width * (sc->stereo + 1);
 			total += size;
-			Com_Printf("%s(%2db) %8i(%d ch) : %s\n",
+			Com_Printf("%s(%2db) %8i(%d ch) %s %2.1f dB %.1fs:%.1f..%.1f..%.1f..%.1f\n",
 					sc->loopstart != -1 ? "L" : " ",
 					sc->width * 8, size,
-					(sc->stereo + 1), sfx->name);
+					(sc->stereo + 1), sfx->name,
+					10 * log10((float)sc->volume / (2 << 15)),
+					(float)sc->length / 1000,
+					(float)sc->begin / 1000,
+					(float)sc->attack / 1000,
+					(float)sc->fade / 1000,
+					(float)sc->end / 1000);
 		}
 		else
 		{
@@ -1164,6 +1479,8 @@ S_SoundList(void)
 
 	Com_Printf("Total resident: %i bytes (%.2f MB) in %d sounds\n", total,
 			(float)total / 1024 / 1024, numsounds);
+	freeup = S_HasFreeSpace();
+	Com_Printf("Used %d of %d sounds%s.\n", used, sound_max, freeup ? ", has free space" : "");
 }
 
 /* ----------------------------------------------------------------- */
@@ -1224,6 +1541,9 @@ S_Init(void)
 	s_underwater_gain_hf = Cvar_Get("s_underwater_gain_hf", "0.25", CVAR_ARCHIVE);
 	s_doppler = Cvar_Get("s_doppler", "0", CVAR_ARCHIVE);
 	s_ps_sorting = Cvar_Get("s_ps_sorting", "1", CVAR_ARCHIVE);
+	/* Reverb and occlusion is fully disabled by default */
+	s_reverb_preset = Cvar_Get("s_reverb_preset", "-1", CVAR_ARCHIVE);
+	s_occlusion_strength = Cvar_Get("s_occlusion_strength", "0", CVAR_ARCHIVE);
 
 	Cmd_AddCommand("play", S_Play);
 	Cmd_AddCommand("stopsound", S_StopAllSounds);
@@ -1253,6 +1573,7 @@ S_Init(void)
 
 	num_sfx = 0;
 	paintedtime = 0;
+	sound_max = 0;
 
 	OGG_Init();
 

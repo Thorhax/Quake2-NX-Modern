@@ -37,14 +37,15 @@ static cvar_t *r_hudscale;
 static cvar_t *r_consolescale;
 static cvar_t *r_menuscale;
 static cvar_t *crosshair_scale;
-static cvar_t *fov;
 extern cvar_t *scr_viewsize;
-extern cvar_t *vid_gamma;
 extern cvar_t *vid_fullscreen;
 extern cvar_t *vid_renderer;
 static cvar_t *r_vsync;
 static cvar_t *gl_anisotropic;
 static cvar_t *gl_msaa_samples;
+static cvar_t *gl1_colorlight;
+static cvar_t *gl3_colorlight;
+static cvar_t *vk_dynamic;
 
 static menuframework_s s_opengl_menu;
 
@@ -54,6 +55,15 @@ static menulist_s s_display_list;
 static menulist_s s_uiscale_list;
 static menuslider_s s_brightness_slider;
 static menuslider_s s_fov_slider;
+static menuslider_s s_gl1_intensity_slider;
+static menuslider_s s_gl3_intensity_slider;
+static menuslider_s s_vk_intensity_slider;
+static menuslider_s s_gl1_overbrightbits_slider;
+static menuslider_s s_gl3_overbrightbits_slider;
+static menuslider_s s_vk_overbrightbits_slider;
+static menulist_s s_gl1_colorlight_list;
+static menulist_s s_gl3_colorlight_list;
+static menulist_s s_vk_dynamic_list;
 static menulist_s s_fs_box;
 static menulist_s s_vsync_list;
 static menulist_s s_af_list;
@@ -61,44 +71,82 @@ static menulist_s s_msaa_list;
 static menuaction_s s_defaults_action;
 static menuaction_s s_apply_action;
 
-static int
-GetRenderer(void)
+// --------
+
+// gl1, gl3, gles3, vk, soft
+#define MAXRENDERERS 5
+
+typedef struct
 {
-	/* First element in array is 'OpenGL 1.4' aka gl1.
-	   Second element in array is 'OpenGL 3.2' aka gl3.
-	   Third element in array is unknown renderer. */
-	if (Q_stricmp(vid_renderer->string, "gl1") == 0)
+	const char *boxstr;
+	const char *cvarstr;
+} renderer;
+
+renderer rendererlist[MAXRENDERERS];
+int numrenderer;
+
+static void
+Renderer_FillRenderdef(void)
+{
+	numrenderer = -1;
+
+	if (VID_HasRenderer("gl1"))
 	{
-		return 0;
+		numrenderer++;
+		rendererlist[numrenderer].boxstr = "[OpenGL 1.4]";
+		rendererlist[numrenderer].cvarstr = "gl1";
 	}
-	else if (Q_stricmp(vid_renderer->string, "gl3") == 0)
+
+	if (VID_HasRenderer("gl3"))
 	{
-		return 1;
+		numrenderer++;
+		rendererlist[numrenderer].boxstr = "[OpenGL 3.2]";
+		rendererlist[numrenderer].cvarstr = "gl3";
 	}
-#ifdef USE_REFVK
-	else if (Q_stricmp(vid_renderer->string, "vk") == 0)
+
+	if (VID_HasRenderer("gles3"))
 	{
-		return 2;
+		numrenderer++;
+		rendererlist[numrenderer].boxstr = "[OpenGL ES3]";
+		rendererlist[numrenderer].cvarstr = "gles3";
 	}
-	else if (Q_stricmp(vid_renderer->string, "soft") == 0)
+
+	if (VID_HasRenderer("vk"))
 	{
-		return 3;
+		numrenderer++;
+		rendererlist[numrenderer].boxstr = "[Vulkan    ]";
+		rendererlist[numrenderer].cvarstr = "vk";
 	}
-	else
+
+	if (VID_HasRenderer("soft"))
 	{
-		return 4;
+		numrenderer++;
+		rendererlist[numrenderer].boxstr = "[Software  ]";
+		rendererlist[numrenderer].cvarstr = "soft";
 	}
-#else
-	else if (Q_stricmp(vid_renderer->string, "soft") == 0)
-	{
-		return 2;
-	}
-	else
-	{
-		return 3;
-	}
-#endif
+
+	// The custom renderer. Must be known to the menu,
+	// but nothing more. The display string is hard
+	// coded below, the cvar is unknown.
+	numrenderer++;
 }
+
+static int
+Renderer_GetRenderer(void)
+{
+	for (int i = 0; i < numrenderer; i++)
+	{
+		if (strcmp(vid_renderer->string, rendererlist[i].cvarstr) == 0)
+		{
+			return i;
+		}
+	}
+
+	// Unknown renderer.
+	return numrenderer;
+}
+
+// --------
 
 static int
 GetCustomValue(menulist_s *list)
@@ -122,21 +170,6 @@ GetCustomValue(menulist_s *list)
 }
 
 static void
-BrightnessCallback(void *s)
-{
-	menuslider_s *slider = (menuslider_s *)s;
-
-	float gamma = slider->curvalue / 10.0;
-	Cvar_SetValue("vid_gamma", gamma);
-}
-
-static void
-FOVCallback(void *s) {
-	menuslider_s *slider = (menuslider_s *)s;
-	Cvar_SetValue("fov", slider->curvalue);
-}
-
-static void
 ResetDefaults(void *unused)
 {
 	VID_MenuInit();
@@ -151,39 +184,16 @@ ApplyChanges(void *unused)
 	qboolean restart = false;
 
 	/* Renderer */
-	if (s_renderer_list.curvalue != GetRenderer())
+	if (s_renderer_list.curvalue != Renderer_GetRenderer())
 	{
-		/*  First element in array is 'OpenGL 1.4' aka gl1.
-			Second element in array is 'OpenGL 3.2' aka gl3.
-			Third element in array is unknown renderer. */
-		if (s_renderer_list.curvalue == 0)
+		// The custom renderer (the last known renderer) cannot be
+		// set, because the menu doesn't know it's cvar value. TODO:
+		// Hack something that it cannot be selected.
+		if (s_renderer_list.curvalue != numrenderer)
 		{
-			Cvar_Set("vid_renderer", "gl1");
+			Cvar_Set("vid_renderer", (char *)rendererlist[s_renderer_list.curvalue].cvarstr);
 			restart = true;
 		}
-		else if (s_renderer_list.curvalue == 1)
-		{
-			Cvar_Set("vid_renderer", "gl3");
-			restart = true;
-		}
-#ifdef USE_REFVK
-		else if (s_renderer_list.curvalue == 2)
-		{
-			Cvar_Set("vid_renderer", "vk");
-			restart = true;
-		}
-		else if (s_renderer_list.curvalue == 3)
-		{
-			Cvar_Set("vid_renderer", "soft");
-			restart = true;
-		}
-#else
-		else if (s_renderer_list.curvalue == 2)
-		{
-			Cvar_Set("vid_renderer", "soft");
-			restart = true;
-		}
-#endif
 	}
 
 	/* auto mode */
@@ -247,6 +257,16 @@ ApplyChanges(void *unused)
 		restart = true;
 	}
 
+	if (gl3_colorlight && gl3_colorlight->value != s_gl3_colorlight_list.curvalue)
+	{
+		Cvar_SetValue("gl3_colorlight", s_gl3_colorlight_list.curvalue);
+	}
+
+	if (gl1_colorlight && gl1_colorlight->value != s_gl1_colorlight_list.curvalue)
+	{
+		Cvar_SetValue("gl1_colorlight", s_gl1_colorlight_list.curvalue);
+	}
+
 	/* anisotropic filtering */
 	if (s_af_list.curvalue == 0)
 	{
@@ -294,18 +314,19 @@ ApplyChanges(void *unused)
 void
 VID_MenuInit(void)
 {
-	int y = 0;
+	int y = 30;
 
-	static const char *renderers[] = {
-			"[OpenGL 1.4]",
-			"[OpenGL 3.2]",
-#ifdef USE_REFVK
-			"[Vulkan    ]",
-#endif
-			"[Software  ]",
-			CUSTOM_MODE_NAME,
-			0
-	};
+	// Renderer selection box.
+	// MAXRENDERERS + Custom + NULL.
+	static const char *renderers[MAXRENDERERS + 2] = { NULL };
+	Renderer_FillRenderdef();
+
+	for (int i = 0; i < numrenderer; i++)
+	{
+		renderers[i] = rendererlist[i].boxstr;
+	}
+
+	renderers[numrenderer] = CUSTOM_MODE_NAME;
 
 	// must be kept in sync with vid_modes[] in vid.c
 	static const char *resolutions[] = {
@@ -410,16 +431,6 @@ VID_MenuInit(void)
 		crosshair_scale = Cvar_Get("crosshair_scale", "-1", CVAR_ARCHIVE);
 	}
 
-	if (!fov)
-	{
-		fov = Cvar_Get("fov", "90",  CVAR_USERINFO | CVAR_ARCHIVE);
-	}
-
-	if (!vid_gamma)
-	{
-		vid_gamma = Cvar_Get("vid_gamma", "1.2", CVAR_ARCHIVE);
-	}
-
 	if (!vid_renderer)
 	{
 		vid_renderer = Cvar_Get("vid_renderer", "gl1", CVAR_ARCHIVE);
@@ -446,9 +457,9 @@ VID_MenuInit(void)
 	s_renderer_list.generic.type = MTYPE_SPINCONTROL;
 	s_renderer_list.generic.name = "renderer";
 	s_renderer_list.generic.x = 0;
-	s_renderer_list.generic.y = (y = 0);
+	s_renderer_list.generic.y = y;
 	s_renderer_list.itemnames = renderers;
-	s_renderer_list.curvalue = GetRenderer();
+	s_renderer_list.curvalue = Renderer_GetRenderer();
 
 	s_mode_list.generic.type = MTYPE_SPINCONTROL;
 	s_mode_list.generic.name = "video mode";
@@ -484,20 +495,105 @@ VID_MenuInit(void)
 	s_brightness_slider.generic.type = MTYPE_SLIDER;
 	s_brightness_slider.generic.name = "brightness";
 	s_brightness_slider.generic.x = 0;
-	s_brightness_slider.generic.y = (y += 20);
-	s_brightness_slider.generic.callback = BrightnessCallback;
-	s_brightness_slider.minvalue = 1;
-	s_brightness_slider.maxvalue = 20;
-	s_brightness_slider.curvalue = vid_gamma->value * 10;
+	s_brightness_slider.generic.y = (y += 10);
+	s_brightness_slider.cvar = "vid_gamma";
+	s_brightness_slider.minvalue = 0.1f;
+	s_brightness_slider.maxvalue = 2.0f;
 
 	s_fov_slider.generic.type = MTYPE_SLIDER;
+	s_fov_slider.generic.name = "field of view";
 	s_fov_slider.generic.x = 0;
 	s_fov_slider.generic.y = (y += 10);
-	s_fov_slider.generic.name = "field of view";
-	s_fov_slider.generic.callback = FOVCallback;
+	s_fov_slider.cvar = "fov";
 	s_fov_slider.minvalue = 60;
 	s_fov_slider.maxvalue = 120;
-	s_fov_slider.curvalue = fov->value;
+	s_fov_slider.slidestep = 1;
+	s_fov_slider.printformat = "%.0f";
+
+	if (strcmp(vid_renderer->string, "gl3") == 0 || strcmp(vid_renderer->string, "gles3") == 0)
+	{
+		gl1_colorlight = NULL;
+		s_gl3_intensity_slider.generic.type = MTYPE_SLIDER;
+		s_gl3_intensity_slider.generic.name = "color intensity";
+		s_gl3_intensity_slider.generic.x = 0;
+		s_gl3_intensity_slider.generic.y = (y += 10);
+		s_gl3_intensity_slider.cvar = "gl3_intensity";
+		s_gl3_intensity_slider.minvalue = 0.1f;
+		s_gl3_intensity_slider.maxvalue = 5.0f;
+
+		s_gl3_overbrightbits_slider.generic.type = MTYPE_SLIDER;
+		s_gl3_overbrightbits_slider.generic.name = "overbrights";
+		s_gl3_overbrightbits_slider.generic.x = 0;
+		s_gl3_overbrightbits_slider.generic.y = (y += 10);
+		s_gl3_overbrightbits_slider.cvar = "gl3_overbrightbits";
+		s_gl3_overbrightbits_slider.minvalue = 0.1f;
+		s_gl3_overbrightbits_slider.maxvalue = 5.0f;
+
+		gl3_colorlight = Cvar_Get("gl3_colorlight", "1", CVAR_ARCHIVE);
+		s_gl3_colorlight_list.generic.type = MTYPE_SPINCONTROL;
+		s_gl3_colorlight_list.generic.name = "color light";
+		s_gl3_colorlight_list.generic.x = 0;
+		s_gl3_colorlight_list.generic.y = (y += 10);
+		s_gl3_colorlight_list.itemnames = yesno_names;
+		s_gl3_colorlight_list.curvalue = (gl3_colorlight->value != 0);
+	}
+	else if (strcmp(vid_renderer->string, "vk") == 0)
+	{
+		s_vk_intensity_slider.generic.type = MTYPE_SLIDER;
+		s_vk_intensity_slider.generic.name = "color intensity";
+		s_vk_intensity_slider.generic.x = 0;
+		s_vk_intensity_slider.generic.y = (y += 10);
+		s_vk_intensity_slider.cvar = "vk_intensity";
+		s_vk_intensity_slider.minvalue = 0;
+		s_vk_intensity_slider.maxvalue = 5;
+		s_vk_intensity_slider.slidestep = 1;
+		s_vk_intensity_slider.printformat = "%.0f";
+
+		s_vk_overbrightbits_slider.generic.type = MTYPE_SLIDER;
+		s_vk_overbrightbits_slider.generic.name = "overbrights";
+		s_vk_overbrightbits_slider.generic.x = 0;
+		s_vk_overbrightbits_slider.generic.y = (y += 10);
+		s_vk_overbrightbits_slider.cvar = "vk_overbrightbits";
+		s_vk_overbrightbits_slider.minvalue = 0.1f;
+		s_vk_overbrightbits_slider.maxvalue = 5.0f;
+
+		vk_dynamic = Cvar_Get("vk_dynamic", "1", CVAR_ARCHIVE);
+		s_vk_dynamic_list.generic.type = MTYPE_SPINCONTROL;
+		s_vk_dynamic_list.generic.name = "dynamic light";
+		s_vk_dynamic_list.generic.x = 0;
+		s_vk_dynamic_list.generic.y = (y += 10);
+		s_vk_dynamic_list.itemnames = yesno_names;
+		s_vk_dynamic_list.curvalue = (vk_dynamic->value != 0);
+	}
+	else
+	{
+		gl3_colorlight = NULL;
+		s_gl1_intensity_slider.generic.type = MTYPE_SLIDER;
+		s_gl1_intensity_slider.generic.name = "color intensity";
+		s_gl1_intensity_slider.generic.x = 0;
+		s_gl1_intensity_slider.generic.y = (y += 10);
+		s_gl1_intensity_slider.cvar = "gl1_intensity";
+		s_gl1_intensity_slider.minvalue = 1.0f;
+		s_gl1_intensity_slider.maxvalue = 10.0f;
+
+		s_gl1_overbrightbits_slider.generic.type = MTYPE_SLIDER;
+		s_gl1_overbrightbits_slider.generic.name = "overbrights";
+		s_gl1_overbrightbits_slider.generic.x = 0;
+		s_gl1_overbrightbits_slider.generic.y = (y += 10);
+		s_gl1_overbrightbits_slider.cvar = "gl1_overbrightbits";
+		s_gl1_overbrightbits_slider.minvalue = 0;
+		s_gl1_overbrightbits_slider.maxvalue = 3;
+		s_gl1_overbrightbits_slider.slidestep = 1;
+		s_gl1_overbrightbits_slider.printformat = "%.0f";
+
+		gl1_colorlight = Cvar_Get("gl1_colorlight", "1", CVAR_ARCHIVE);
+		s_gl1_colorlight_list.generic.type = MTYPE_SPINCONTROL;
+		s_gl1_colorlight_list.generic.name = "color light";
+		s_gl1_colorlight_list.generic.x = 0;
+		s_gl1_colorlight_list.generic.y = (y += 10);
+		s_gl1_colorlight_list.itemnames = yesno_names;
+		s_gl1_colorlight_list.curvalue = (gl1_colorlight->value != 0);
+	}
 
 	s_uiscale_list.generic.type = MTYPE_SPINCONTROL;
 	s_uiscale_list.generic.name = "ui scale";
@@ -594,6 +690,24 @@ VID_MenuInit(void)
 
 	Menu_AddItem(&s_opengl_menu, (void *)&s_brightness_slider);
 	Menu_AddItem(&s_opengl_menu, (void *)&s_fov_slider);
+	if (strcmp(vid_renderer->string, "gl3") == 0 || strcmp(vid_renderer->string, "gles3") == 0)
+	{
+		Menu_AddItem(&s_opengl_menu, (void *)&s_gl3_intensity_slider);
+		Menu_AddItem(&s_opengl_menu, (void *)&s_gl3_overbrightbits_slider);
+		Menu_AddItem(&s_opengl_menu, (void *)&s_gl3_colorlight_list);
+	}
+	else if (strcmp(vid_renderer->string, "vk") == 0)
+	{
+		Menu_AddItem(&s_opengl_menu, (void *)&s_vk_intensity_slider);
+		Menu_AddItem(&s_opengl_menu, (void *)&s_vk_overbrightbits_slider);
+		Menu_AddItem(&s_opengl_menu, (void *)&s_vk_dynamic_list);
+	}
+	else if (strcmp(vid_renderer->string, "gl1") == 0)
+	{
+		Menu_AddItem(&s_opengl_menu, (void *)&s_gl1_intensity_slider);
+		Menu_AddItem(&s_opengl_menu, (void *)&s_gl1_overbrightbits_slider);
+		Menu_AddItem(&s_opengl_menu, (void *)&s_gl1_colorlight_list);
+	}
 	Menu_AddItem(&s_opengl_menu, (void *)&s_uiscale_list);
 	Menu_AddItem(&s_opengl_menu, (void *)&s_fs_box);
 	Menu_AddItem(&s_opengl_menu, (void *)&s_vsync_list);

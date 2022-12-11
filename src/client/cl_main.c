@@ -553,6 +553,9 @@ CL_InitLocal(void)
 	cl_http_filelists = Cvar_Get("cl_http_filelists", "1", 0);
 	cl_http_downloads = Cvar_Get("cl_http_downloads", "1", CVAR_ARCHIVE);
 	cl_http_max_connections = Cvar_Get("cl_http_max_connections", "4", 0);
+	cl_http_show_dw_progress = Cvar_Get("cl_http_show_dw_progress", "0", 0);
+	cl_http_bw_limit_rate = Cvar_Get("cl_http_bw_limit_rate", "0", 0);
+	cl_http_bw_limit_tmout = Cvar_Get("cl_http_bw_limit_tmout", "0", 0);
 #endif
 
 	/* register our commands */
@@ -609,6 +612,8 @@ CL_InitLocal(void)
 	Cmd_AddCommand("weapprev", NULL);
 	Cmd_AddCommand("listentities", NULL);
 	Cmd_AddCommand("teleport", NULL);
+	Cmd_AddCommand("spawnentity", NULL);
+	Cmd_AddCommand("spawnonstart", NULL);
 	Cmd_AddCommand("cycleweap", NULL);
 }
 
@@ -663,10 +668,11 @@ cheatvar_t cheatvars[] = {
 	{"paused", "0"},
 	{"fixedtime", "0"},
 	{"sw_draworder", "0"},
-	{"gl_lightmap", "0"},
+	{"r_lightmap", "0"},
 	{"gl_saturatelighting", "0"},
 	{"cl_kickangles", "1"},
 	{"g_footsteps", "1"},
+	{"g_machinegun_norecoil", "0"},
 	{NULL, NULL}
 };
 
