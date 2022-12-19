@@ -47,6 +47,9 @@
 #include <switch.h>
 #define SOLDER_LIBDL_COMPAT
 #include <solder.h>
+// no need to autoload deps
+#undef RTLD_LAZY
+#define RTLD_LAZY (SOLDER_LAZY | SOLDER_NO_AUTOLOAD)
 #else
 #include <dlfcn.h>
 #endif

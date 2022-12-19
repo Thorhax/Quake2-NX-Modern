@@ -1335,6 +1335,8 @@ SDL_BackendInit(void)
 	s_sdldriver = (Cvar_Get("s_sdldriver", "alsa", CVAR_ARCHIVE));
 #elif __APPLE__
 	s_sdldriver = (Cvar_Get("s_sdldriver", "CoreAudio", CVAR_ARCHIVE));
+#elif __SWITCH__
+	s_sdldriver = (Cvar_Get("s_sdldriver", "switch", CVAR_ARCHIVE));
 #else
 	s_sdldriver = (Cvar_Get("s_sdldriver", "dsp", CVAR_ARCHIVE));
 #endif

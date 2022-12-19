@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 
 # Print a message that using the Makefiles is recommended.
-message(NOTICE: " The CMakeLists.txt is unmaintained. Use the Makefile if possible.")
+if(NOT NSWITCH)
+	message(NOTICE: " The CMakeLists.txt is unmaintained. Use the Makefile if possible.")
+endif()
 
 # Enforce "Debug" as standard build type.
 if(NOT CMAKE_BUILD_TYPE)
@@ -213,6 +215,11 @@ endif()
 # them and add the include/linker directories and flags (in case the package
 # manager find it in a weird place).
 find_package(SDL2 REQUIRED)
+if(NINTENDO_SWITCH)
+	# this used to work automatically but now find_package just silently does nothing for some reason
+	set(SDL2_LIBRARY "SDL2")
+	set(SDL2_INCLUDE_DIR "${DEVKITPRO}/portlibs/switch/include/SDL2")
+endif()
 list(APPEND yquake2IncludeDirectories "${SDL2_INCLUDE_DIR}/..")
 list(APPEND yquake2SDLLinkerFlags ${SDL2_LIBRARY})
 
@@ -867,7 +874,7 @@ if(NINTENDO_SWITCH)
 		TARGET quake2 POST_BUILD
 		COMMAND nacptool --create "${NX_APP_TITLE}" "${NX_APP_AUTHOR}" "${NX_APP_VERSION}" "nxquake2.nacp"
 		COMMAND elf2nro
-			"${CMAKE_BINARY_DIR}/release/quake2"
+			"${CMAKE_BINARY_DIR}/release/quake2.elf"
 			"${CMAKE_BINARY_DIR}/release/nxquake2.nro"
 			--nacp=nxquake2.nacp
 			--icon="${CMAKE_SOURCE_DIR}/icon.jpg"

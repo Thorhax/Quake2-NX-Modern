@@ -1644,10 +1644,10 @@ FS_GetNextRawPath(const char* lastRawPath)
 	return NULL;
 }
 
-#ifdef _MSC_VER // looks like MSVC/the Windows CRT doesn't have basename()
+#if defined(_MSC_VER) || defined(__SWITCH__) // looks like MSVC/the Windows CRT doesn't have basename()
 // returns the last part of the given pathname, after last (back)slash
 // if the last character is a (back)slash, it's removed (set to '\0')
-static char* basename( char* n )
+static char* local_basename( char* n )
 {
 	size_t l = strlen(n);
 	while (n[l - 1] == '\\' || n[l - 1] == '/') // cut off trailing (back)slashes, if any
@@ -1661,6 +1661,10 @@ static char* basename( char* n )
 		return (r2 == NULL || r1 > r2) ? (r1 + 1) : (r2 + 1);
 	return (r2 != NULL) ? (r2 + 1) : n;
 }
+#ifdef __SWITCH__
+#undef basename
+#define basename local_basename
+#endif
 #endif // _MSC_VER
 
 void

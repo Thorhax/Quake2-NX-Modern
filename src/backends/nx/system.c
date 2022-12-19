@@ -31,6 +31,7 @@
 #include <solder.h>
 
 #ifdef DEBUG
+#include <unistd.h>
 static int nxlink_sock = -1;
 #endif
 

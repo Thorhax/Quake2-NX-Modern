@@ -385,7 +385,7 @@ Key_Console(int key)
 	}
 
 #ifdef __SWITCH__
-	if (key == K_JOY3)
+	if (key == K_BTN_Y)
 	{
 		/* input command using the OSK */
 		const int maxlen = sizeof(key_lines[edit_line]) - 4;
@@ -395,7 +395,7 @@ Key_Console(int key)
 	}
 #endif
 
-	if ((key == K_ENTER) || (key == K_KP_ENTER) || (key == K_JOY1))
+	if ((key == K_ENTER) || (key == K_KP_ENTER) || (key == K_BTN_A))
 	{
 		/* slash text are commands, else chat */
 		if ((key_lines[edit_line][1] == '\\') ||
@@ -424,7 +424,7 @@ Key_Console(int key)
 		return;
 	}
 
-	if ((key == K_TAB) || (key == K_JOY11))
+	if ((key == K_TAB) || (key == K_BTN_START))
 	{
 		/* command completion */
 		CompleteCommand();
@@ -434,7 +434,7 @@ Key_Console(int key)
 	}
 
 	if ((key == K_BACKSPACE) || (key == K_LEFTARROW) ||
-		(key == K_KP_LEFTARROW) || (key == K_JOY13) || (key == K_JOY2) ||
+		(key == K_KP_LEFTARROW) || (key == K_BTN_B) || (key == K_DPAD_LEFT) ||
 		((key == 'h') && (keydown[K_CTRL])))
 	{
 		if (key_linepos > 1)
@@ -454,7 +454,7 @@ Key_Console(int key)
 	}
 
 	if ((key == K_UPARROW) || (key == K_KP_UPARROW) ||
-		((key == 'p') && keydown[K_CTRL]) || (key == K_JOY14))
+		((key == 'p') && keydown[K_CTRL]) || (key == K_DPAD_UP))
 	{
 		do
 		{
@@ -474,7 +474,7 @@ Key_Console(int key)
 	}
 
 	if ((key == K_DOWNARROW) || (key == K_KP_DOWNARROW) ||
-		((key == 'n') && keydown[K_CTRL]) || (key == K_JOY16))
+		((key == 'n') && keydown[K_CTRL]) || (key == K_DPAD_DOWN))
 	{
 		if (history_line == edit_line)
 		{
@@ -595,7 +595,7 @@ Key_Message(int key)
 {
 	char last;
 
-	if ((key == K_ENTER) || (key == K_KP_ENTER) || (key == K_JOY1))
+	if ((key == K_ENTER) || (key == K_KP_ENTER) || (key == K_BTN_A))
 	{
 		if (chat_team)
 		{
@@ -653,7 +653,7 @@ Key_Message(int key)
 		return;
 	}
 
-	if (key == K_LEFTARROW || key == K_JOY13)
+	if (key == K_LEFTARROW || key == K_DPAD_LEFT)
 	{
 		if (chat_cursorpos > 0)
 		{
@@ -675,7 +675,7 @@ Key_Message(int key)
 		return;
 	}
 
-	if (key == K_RIGHTARROW || key == K_JOY15)
+	if (key == K_RIGHTARROW || key == K_DPAD_RIGHT)
 	{
 		if (chat_buffer[chat_cursorpos])
 		{
@@ -1091,17 +1091,17 @@ Key_Init(void)
 
 #ifdef __SWITCH__
 	// A to enter command, B to clear, + to autocomplete
-	consolekeys[K_JOY1] = true;
-	consolekeys[K_JOY2] = true;
+	consolekeys[K_BTN_B] = true;
+	consolekeys[K_BTN_A] = true;
 	// Y to open OSK
-	consolekeys[K_JOY3] = true;
+	consolekeys[K_BTN_Y] = true;
 	// + to autocomplete
-	consolekeys[K_JOY11] = true;
+	consolekeys[K_BTN_START] = true;
 	// dpad to scroll cmd history
-	consolekeys[K_JOY13] = true;
-	consolekeys[K_JOY14] = true;
-	consolekeys[K_JOY15] = true;
-	consolekeys[K_JOY16] = true;
+	consolekeys[K_DPAD_DOWN] = true;
+	consolekeys[K_DPAD_LEFT] = true;
+	consolekeys[K_DPAD_RIGHT] = true;
+	consolekeys[K_DPAD_UP] = true;
 	// LT/RT to scroll console
 	consolekeys[K_TRIG_LEFT] = true;
 	consolekeys[K_TRIG_RIGHT] = true;
