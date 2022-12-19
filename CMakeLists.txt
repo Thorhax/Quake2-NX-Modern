@@ -208,7 +208,7 @@ if(NINTENDO_SWITCH)
 	# set some metadata fields
 	set(NX_APP_TITLE "NXQuake2")
 	set(NX_APP_AUTHOR "Yamagi, fgsfds")
-	set(NX_APP_VERSION "0.5.0 / 7.45+")
+	set(NX_APP_VERSION "r6 / 8.20+")
 endif()
 
 # Required libraries to build the different components of the binaries. Find
