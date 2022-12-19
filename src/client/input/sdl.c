@@ -40,6 +40,10 @@
 #include "../header/keyboard.h"
 #include "../header/client.h"
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 // ----
 
 // Maximal mouse move per frame
@@ -171,6 +175,85 @@ static float flick_samples[MAX_SMOOTH_SAMPLES];
 static unsigned short int front_sample = 0;
 
 extern void CalibrationFinishedCallback(void);
+
+/* ------------------------------------------------------------------ */
+
+#ifdef __SWITCH__
+
+// switch-sdl2 is still at version 2.0.14, which means no SDL2 gyro
+// so we manually poll sixaxis sensors for gyro aiming
+
+static HidSixAxisSensorHandle sixaxis_handles[4];
+
+static void
+IN_StartupSixaxis(void) 
+{
+	hidGetSixAxisSensorHandles(&sixaxis_handles[0], 2, HidNpadIdType_No1, HidNpadStyleTag_NpadJoyDual);
+	hidGetSixAxisSensorHandles(&sixaxis_handles[2], 1, HidNpadIdType_No1, HidNpadStyleTag_NpadFullKey);
+	hidGetSixAxisSensorHandles(&sixaxis_handles[3], 1, HidNpadIdType_Handheld, HidNpadStyleTag_NpadHandheld);
+	hidStartSixAxisSensor(sixaxis_handles[0]);
+	hidStartSixAxisSensor(sixaxis_handles[1]);
+	hidStartSixAxisSensor(sixaxis_handles[2]);
+	hidStartSixAxisSensor(sixaxis_handles[3]);
+}
+
+static
+void IN_ShutdownSixaxis(void) 
+{
+	hidStopSixAxisSensor(sixaxis_handles[0]);
+	hidStopSixAxisSensor(sixaxis_handles[1]);
+	hidStopSixAxisSensor(sixaxis_handles[2]);
+	hidStopSixAxisSensor(sixaxis_handles[3]);
+}
+
+static
+void IN_UpdateSixaxis(void)
+{
+	HidSixAxisSensorState sixaxis = { 0 };
+	size_t numstates;
+	u64 stylemask;
+
+	gyro_yaw = gyro_pitch = 0;
+
+	if (!gyro_mode->value)
+		return;
+
+	// hidSixAxisSensorValuesRead/CONTROLLER_P1_AUTO do not exist anymore,
+	// and we can't check the pad type because the pad struct is private to SDL
+	// ... so we try to check player 1 and handheld
+	stylemask = hidGetNpadStyleSet(HidNpadIdType_No1) |
+		hidGetNpadStyleSet(HidNpadIdType_Handheld);
+
+	if (stylemask & HidNpadStyleTag_NpadHandheld)
+		numstates = hidGetSixAxisSensorStates(sixaxis_handles[3], &sixaxis, 1);
+	else if (stylemask & HidNpadStyleTag_NpadFullKey)
+		numstates = hidGetSixAxisSensorStates(sixaxis_handles[2], &sixaxis, 1);
+	else if (stylemask & HidNpadStyleTag_NpadJoyDual) // hope to god right joycon is connected
+		numstates = hidGetSixAxisSensorStates(sixaxis_handles[1], &sixaxis, 1);
+	else
+		numstates = 0;
+
+	if (numstates)
+	{
+		if (countdown_reason == REASON_GYROCALIBRATION && updates_countdown)
+		{
+			// calibration in progress
+			gyro_accum[0] += sixaxis.angular_velocity.x;
+			gyro_accum[1] += sixaxis.angular_velocity.y;
+			gyro_accum[2] += sixaxis.angular_velocity.z;
+			num_samples++;
+		}
+		else if (gyro_active && gyro_mode->value && !cl_paused->value && cls.key_dest == key_game)
+		{
+			gyro_yaw = gyro_turning_axis->value ?
+				sixaxis.angular_velocity.y - gyro_calibration_y->value :
+				sixaxis.angular_velocity.z - gyro_calibration_z->value;
+			gyro_pitch = sixaxis.angular_velocity.x - gyro_calibration_x->value;
+		}
+	}
+}
+
+#endif
 
 /* ------------------------------------------------------------------ */
 
@@ -826,6 +909,11 @@ IN_Update(void)
 		want_grab = (vid_fullscreen->value || in_grab->value == 1 ||
 			(in_grab->value == 2 && windowed_mouse->value));
 	}
+
+#ifdef __SWITCH__
+	// update gyro sensors
+	IN_UpdateSixaxis();
+#endif
 
 	// calling GLimp_GrabInput() each frame is a bit ugly but simple and should work.
 	// The called SDL functions return after a cheap check, if there's nothing to do.
@@ -1678,7 +1766,12 @@ IN_Controller_Init(qboolean notify_user)
 				SDL_GameControllerSetLED(controller, 0, 80, 0);	// green light
 			}
 
-#endif	// SDL_VERSION_ATLEAST(2, 0, 16)
+#elif __SWITCH__	// switch-sdl2 is still at 2.0.14
+
+			show_gyro = true; // we know we have sixaxis
+			Com_Printf( "Gyro sensor enabled\n" );
+
+#endif
 
 #if SDL_VERSION_ATLEAST(2, 0, 18)	// support for query on features from controller
 			if (SDL_GameControllerHasRumble(controller))
@@ -1769,6 +1862,9 @@ IN_Init(void)
 #ifndef __SWITCH__
 	// this pops up the OSK immediately, so don't do it
 	SDL_StartTextInput();
+#else
+	// have our own gyro system on the switch
+	IN_StartupSixaxis();
 #endif
 
 	IN_Controller_Init(false);
@@ -1812,6 +1908,10 @@ IN_Shutdown(void)
 	Com_Printf("Shutting down input.\n");
 
 	IN_Controller_Shutdown(false);
+
+#ifdef __SWITCH__
+	IN_ShutdownSixaxis();
+#endif
 
 	const Uint32 subsystems = SDL_INIT_GAMECONTROLLER;
 	if (SDL_WasInit(subsystems) == subsystems)

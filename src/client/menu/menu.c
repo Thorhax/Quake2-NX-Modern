@@ -2196,26 +2196,29 @@ ControlsResetDefaultsFunc(void *unused)
     // (would be a better idea to move this to default.cfg, but someone will
     // probably accidentally delete that)
 #ifdef __SWITCH__
-    //Movement
-    Cbuf_AddText("bind TRIG_LEFT +moveup\n");   // Jump
-    Cbuf_AddText("bind JOY2 +moveup\n");        // Jump
-    Cbuf_AddText("bind JOY1 +movedown\n");      // Crouch
-    Cbuf_AddText("bind JOY5 +movedown\n");      // Crouch
-    Cbuf_AddText("bind JOY7 +movedown\n");      // Crouch
+    // Movement
+    Cbuf_AddText("bind TRIG_LEFT +moveup\n");
+    Cbuf_AddText("bind BTN_A +moveup\n");
+    Cbuf_AddText("bind BTN_B +movedown\n");
+    Cbuf_AddText("bind STICK_LEFT +movedown\n");
+    Cbuf_AddText("bind SHOULDR_LEFT +movedown\n");
     // Attack
     Cbuf_AddText("bind TRIG_RIGHT +attack\n");
-    Cbuf_AddText("bind JOY3 weapnext\n");
-    Cbuf_AddText("bind JOY4 weapprev\n");
+    Cbuf_AddText("bind BTN_X weapnext\n");
+    Cbuf_AddText("bind BTN_Y weapprev\n");
     // Inventory actions
-    Cbuf_AddText("bind JOY14 inven\n");
-    Cbuf_AddText("bind JOY13 invprev\n");
-    Cbuf_AddText("bind JOY15 invnext\n");
-    Cbuf_AddText("bind JOY16 invdrop\n");
-    Cbuf_AddText("bind JOY8 invuse\n");
+    Cbuf_AddText("bind DP_UP inven\n");
+    Cbuf_AddText("bind DP_LEFT invprev\n");
+    Cbuf_AddText("bind DP_RIGHT invnext\n");
+    Cbuf_AddText("bind DP_DOWN invdrop\n");
+    Cbuf_AddText("bind SHOULDR_RIGHT invuse\n");
     // Other
-    Cbuf_AddText("bind JOY11 \"cmd help\"\n");
+    Cbuf_AddText("bind BTN_START \"cmd help\"\n");
     Cbuf_AddText("joy_yawsensitivity 1.5\n");
     Cbuf_AddText("joy_pitchsensitivity 1.5\n");
+    Cbuf_AddText("gyro_yawsensitivity 2.0\n");
+    Cbuf_AddText("gyro_pitchsensitivity 2.0\n");
+    Cbuf_AddText("gyro_mode 0\n");
     Cbuf_Execute();
 #endif
 
