@@ -206,9 +206,9 @@ if(NINTENDO_SWITCH)
 		add_definitions(-DDEBUG_NXLINK)
 	endif()
 	# set some metadata fields
-	set(NX_APP_TITLE "NXQuake2")
-	set(NX_APP_AUTHOR "Yamagi, fgsfds")
-	set(NX_APP_VERSION "r6 / 8.20+")
+	set(NX_APP_TITLE "Yamagi Quake II 8.21 NX")
+	set(NX_APP_AUTHOR "Thorhax")
+	set(NX_APP_VERSION "8.21 NX")
 endif()
 
 # Required libraries to build the different components of the binaries. Find
